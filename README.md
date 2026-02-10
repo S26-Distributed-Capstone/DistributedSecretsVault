@@ -1,6 +1,7 @@
 # DistributedSecretsVault
 
 The distributed secrets vault backend repo.
+https://docs.google.com/document/d/1nvzYSdccBbdk0uiQnFu74rlTIZ1Uh9fU-n-h0eZdvn0/edit?usp=sharing
 
 # Distributed Secrets Vault
 
