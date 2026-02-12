@@ -29,6 +29,7 @@ graph LR
 
 - TODO: finalize the approach
 - Ideas: hash/encrypt user credentials, use a system that doesn't require the user to store credentials (OPAQUE)
+- Assume that Oauth2 is set up
 
 ---
 
