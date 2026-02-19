@@ -1,0 +1,31 @@
+# Ignore everything in target except the dependency directory
+target/
+!target/dependency/
+
+# Source files (already compiled into JAR)
+src/
+
+# Build configuration (build already complete)
+pom.xml
+
+# Maven wrapper
+mvnw
+mvnw.cmd
+.mvn
+
+# Git and version control
+.git
+.github
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
