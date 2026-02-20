@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:8.4
+    container_name: dsv-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-REDISPASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dsv-network
+
+  app:
+    build: .
+    container_name: dsv-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-REDISPASSWORD}
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - dsv-network
+
+volumes:
+  redis-data:
+
+networks:
+  dsv-network:
+    driver: bridge
