@@ -4,10 +4,80 @@ This guide covers building and running the Distributed Secrets Vault using Docke
 
 ## Prerequisites
 
-- Docker installed and running
+- Docker and Docker Compose installed
 - Java 25+ (for local builds)
 
-## Quick Start
+## Quick Start with Docker Compose (Recommended)
+
+The easiest way to run the application with Redis:
+
+```bash
+# 1. Setup environment (from project root)
+cp .env.example .env
+# Edit .env to set your REDIS_PASSWORD
+
+# 2. Build and start all services
+./mvnw clean package
+mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+cd docker && docker compose up --build
+```
+
+The application will be available at:
+
+- API: `http://localhost:8080`
+- Redis: `localhost:6379`
+
+### Docker Compose Commands
+
+```bash
+# Start in foreground (see logs)
+cd docker && docker compose up
+
+# Start in background
+cd docker && docker compose up -d
+
+# View logs
+cd docker && docker compose logs -f app
+cd docker && docker compose logs -f redis
+
+# Stop services
+cd docker && docker compose down
+
+# Stop and remove volumes (clean slate)
+cd docker && docker compose down -v
+
+# Rebuild after code changes
+./mvnw clean package && mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+cd docker && docker compose up --build
+```
+
+## Configuration
+
+### Environment Variables
+
+Configuration is managed through the `.env` file in the `docker/` directory:
+
+```env
+# Redis Configuration
+REDIS_PASSWORD=your-secure-password
+
+# Spring Profile (dev, prod, test)
+SPRING_PROFILES_ACTIVE=dev
+```
+
+**Security Note:** Never commit `.env` to git. Use `.env.example` as a template.
+
+### Redis Configuration
+
+Redis persistence and performance settings are configured in `docker/redis/redis.conf`:
+
+- AOF persistence with `everysec` fsync
+- RDB snapshots every 15 minutes
+- No eviction policy (suitable for secrets storage)
+
+## Standalone Docker (Without Compose)
+
+If you need to run without Docker Compose:
 
 ### Build the Docker Image
 
@@ -26,42 +96,35 @@ docker build -t distributed-secrets-vault .
 docker run -p 8080:8080 distributed-secrets-vault
 ```
 
-The application will be available at `http://localhost:8080`
-
-## Configuration
-
-> **Note:** Currently, the application runs with default Spring Boot configuration. 
-> Startup configuration requirements will be documented here as features are implemented.
-
-### Environment Variables
-
-Pass environment variables using `-e` flag:
+### With Environment Variables
 
 ```bash
-docker run -e "SPRING_PROFILES_ACTIVE=prod" -p 8080:8080 distributed-secrets-vault
-```
-
-### Volume Mounts
-
-For persistent data or configuration files (when needed):
-
-```bash
-docker run -v /path/to/config:/config -p 8080:8080 distributed-secrets-vault
+docker run -e "SPRING_PROFILES_ACTIVE=prod" \
+  -e "SPRING_DATA_REDIS_HOST=redis.example.com" \
+  -e "SPRING_DATA_REDIS_PASSWORD=yourpassword" \
+  -p 8080:8080 distributed-secrets-vault
 ```
 
 ## Development
 
-### Rebuilding After Code Changes
+### Fast Rebuilding After Code Changes
 
-Layered Dockerfile enables fast rebuilds when only application code changes:
+The layered Dockerfile enables fast rebuilds when only application code changes:
 
 ```bash
+# Rebuild application
 ./mvnw clean package
-(cd target/dependency; jar -xf ../*.jar)
-docker build -t distributed-secrets-vault .
+mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+
+# Restart with new code
+cd docker && docker compose up --build app
 ```
 
 Only the application layer (~5MB) rebuilds; dependencies (~45MB) remain cached.
+
+### Testing Redis Persistence
+
+TODO: create persistence testing
 
 ### Debugging
 
