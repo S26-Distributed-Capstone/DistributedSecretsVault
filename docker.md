@@ -55,7 +55,7 @@ cd docker && docker compose up --build
 
 ### Environment Variables
 
-Configuration is managed through the `.env` file in the `docker/` directory:
+Configuration is managed through the `.env` file in the project root:
 
 ```env
 # Redis Configuration
@@ -66,6 +66,8 @@ SPRING_PROFILES_ACTIVE=dev
 ```
 
 **Security Note:** Never commit `.env` to git. Use `.env.example` as a template.
+
+Docker Compose automatically loads `.env` from the project root (or from `docker/` parent directory).
 
 ### Redis Configuration
 
