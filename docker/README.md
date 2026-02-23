@@ -2,6 +2,8 @@
 
 This directory contains all Docker-related configuration for the Distributed Secrets Vault.
 
+TODO: update this doc to reflect directory changes
+
 ## Structure
 
 ```
