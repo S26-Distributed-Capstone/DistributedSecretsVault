@@ -36,41 +36,41 @@ Project root:
    cp .env.example .env
    ```
 
-2. **Set required values in `.env`:**
+2. **Set required values in `.env`** (recommended; otherwise dev compose uses defaults):
 
    ```env
    REDIS_PASSWORD=your-secure-password-here
    POSTGRES_PASSWORD=your-postgres-password-here
    ```
 
-   Optionally set `POSTGRES_USER` and `POSTGRES_DB` (defaults: `dsv`).
+   If you skip `.env`, the **development** compose files use the same defaults as `.env.example` (`REDIS_PASSWORD`, `POSTGRES_PASSWORD`). Set stronger values in `.env` for any real use. Optionally set `POSTGRES_USER` and `POSTGRES_DB` (defaults: `dsv`).
 
 3. **Build and start from project root:**
 
    ```bash
    ./mvnw clean package
    mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-   cd docker && docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up --build
+   docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
    ```
 
-   Note: Docker Compose automatically loads `.env` from the project root.
+   When you run `docker compose` from the project root (as in the commands below), Compose loads `.env` from the project root.
 
    **Other compose files:**
-   - App only: `docker compose -f dsv/docker-compose.dsv.yml up --build`
-   - App + Redis: `docker compose -f dsv/docker-compose.dsv-redis.yml up --build`
-   - App + PostgreSQL: `docker compose -f dsv/docker-compose.dsv-postgresql.yml up --build`
+   - App only: `docker compose -f docker/dsv/docker-compose.dsv.yml up --build`
+   - App + Redis: `docker compose -f docker/dsv/docker-compose.dsv-redis.yml up --build`
+   - App + PostgreSQL: `docker compose -f docker/dsv/docker-compose.dsv-postgresql.yml up --build`
 
 ## Environment Variables
 
-| Variable                 | Description                      | Default     |
-| ------------------------ | -------------------------------- | ----------- |
-| `REDIS_PASSWORD`          | Redis authentication password    | `REDIS_PASSWORD` |
-| `POSTGRES_USER`          | PostgreSQL user                  | `dsv`       |
-| `POSTGRES_PASSWORD`      | PostgreSQL password (required)   | —           |
-| `POSTGRES_DB`            | PostgreSQL database name         | `dsv`       |
-| `POSTGRES_REPLICATION_USER` | Replication user (production)  | `replicator` |
-| `POSTGRES_REPLICATION_PASSWORD` | Replication password (production) | —        |
-| `SPRING_PROFILES_ACTIVE` | Spring Boot profile              | `dev`       |
+| Variable                        | Description                       | Default                                                   |
+| ------------------------------- | --------------------------------- | --------------------------------------------------------- |
+| `REDIS_PASSWORD`                | Redis authentication password     | Placeholder in `.env.example`; set in `.env` for real use |
+| `POSTGRES_USER`                 | PostgreSQL user                   | `dsv`                                                     |
+| `POSTGRES_PASSWORD`             | PostgreSQL password (required)    | Placeholder in `.env.example`; set in `.env` for real use |
+| `POSTGRES_DB`                   | PostgreSQL database name          | `dsv`                                                     |
+| `POSTGRES_REPLICATION_USER`     | Replication user (production)     | `replicator`                                              |
+| `POSTGRES_REPLICATION_PASSWORD` | Replication password (production) | —                                                         |
+| `SPRING_PROFILES_ACTIVE`        | Spring Boot profile               | `dev`                                                     |
 
 ## Redis Configuration
 
@@ -101,35 +101,37 @@ See `redis/redis.conf` for full configuration.
 
 ### `app`
 
-- **Build**: From parent directory Dockerfile
+- **Build**: From project root (build context `../..`); uses the Dockerfile in the project root.
 - **Ports**: 8080
 - **Depends on**: Redis and/or PostgreSQL (waits for health checks when present)
 
 ## Commands
 
+All commands assume you are in the **project root**.
+
 ```bash
-# Full dev stack (app + Redis + PostgreSQL) from project root
+# Full dev stack (app + Redis + PostgreSQL)
 ./mvnw clean package
 mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-cd docker && docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up --build
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
 
 # Start in background
-docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up -d
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up -d
 
 # View logs
-docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml logs -f app
-docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml logs -f redis
-docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml logs -f postgres
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f app
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f redis
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f postgres
 
 # Stop services
-docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml down
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml down
 
 # Clean slate (removes volumes)
-docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml down -v
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml down -v
 
 # Rebuild after code changes
-cd .. && ./mvnw clean package && mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-cd docker && docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up --build
+./mvnw clean package && mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
 ```
 
 ## Production PostgreSQL (multi-node)
@@ -137,9 +139,8 @@ cd docker && docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up --
 For production, run one primary and two synchronous standbys for redundancy:
 
 ```bash
-cd docker
-# Set in .env: POSTGRES_PASSWORD, POSTGRES_REPLICATION_USER (default: replicator), POSTGRES_REPLICATION_PASSWORD
-docker compose -f postgresql/docker-compose.postgresql-production.yml up -d
+# From project root. Set in .env: POSTGRES_PASSWORD, POSTGRES_REPLICATION_USER (default: replicator), POSTGRES_REPLICATION_PASSWORD
+docker compose -f docker/postgresql/docker-compose.postgresql-production.yml up -d
 ```
 
 - **postgres-primary**: Read-write; uses `postgresql/postgresql.conf` (WAL archiving, synchronous replication). Port 5432.

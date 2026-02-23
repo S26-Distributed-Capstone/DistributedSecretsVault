@@ -9,124 +9,165 @@ This guide covers building and running the Distributed Secrets Vault using Docke
 
 ## Quick Start with Docker Compose (Recommended)
 
-The easiest way to run the application with Redis:
+The easiest way to run the application with Redis and PostgreSQL:
 
 ```bash
-# 1. Setup environment (from project root)
+# 1. Setup environment (from project root; optional for quick start)
 cp .env.example .env
-# Edit .env to set your REDIS_PASSWORD
+# Edit .env: set REDIS_PASSWORD and POSTGRES_PASSWORD (dev compose defaults match .env.example if unset)
 
 # 2. Build and start all services
 ./mvnw clean package
 mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-cd docker && docker compose up --build
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
 ```
 
 The application will be available at:
 
-- API: `http://localhost:8080`
-- Redis: `localhost:6379`
+- **API:** `http://localhost:8080`
+- **Redis:** `localhost:6379`
+- **PostgreSQL:** `localhost:5432`
 
-### Docker Compose Commands
+### Compose file layout
+
+Compose files live under `docker/`; there is no single `docker-compose.yml` at the root. Use `-f` to choose a file:
+
+| File                                                  | Stack                                        |
+| ----------------------------------------------------- | -------------------------------------------- |
+| `dsv/docker-compose.dsv.yml`                          | App only                                     |
+| `dsv/docker-compose.dsv-redis.yml`                    | App + Redis                                  |
+| `dsv/docker-compose.dsv-postgresql.yml`               | App + PostgreSQL                             |
+| `dsv/docker-compose.dsv-redis-postgresql.yml`         | App + Redis + PostgreSQL (full dev stack)    |
+| `postgresql/docker-compose.postgresql.yml`            | PostgreSQL only (single node, dev)           |
+| `postgresql/docker-compose.postgresql-production.yml` | PostgreSQL primary + 2 standbys (production) |
+| `redis/docker-compose.redis.yml`                      | Redis only                                   |
+
+### Docker Compose commands
+
+All commands below assume you are in the **project root**. Use the same `-f` path for the stack you are running.
 
 ```bash
-# Start in foreground (see logs)
-cd docker && docker compose up
+# Start full dev stack in foreground (see logs)
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up
 
 # Start in background
-cd docker && docker compose up -d
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up -d
 
 # View logs
-cd docker && docker compose logs -f app
-cd docker && docker compose logs -f redis
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f app
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f redis
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f postgres
 
 # Stop services
-cd docker && docker compose down
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml down
 
 # Stop and remove volumes (clean slate)
-cd docker && docker compose down -v
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml down -v
 
 # Rebuild after code changes
 ./mvnw clean package && mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-cd docker && docker compose up --build
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
 ```
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 Configuration is managed through the `.env` file in the project root:
 
 ```env
-# Redis Configuration
+# Redis
 REDIS_PASSWORD=your-secure-password
 
-# Spring Profile (dev, prod, test)
+# PostgreSQL (user accounts)
+POSTGRES_USER=dsv
+POSTGRES_PASSWORD=your-postgres-password
+POSTGRES_DB=dsv
+
+# Spring profile (dev, prod, test)
 SPRING_PROFILES_ACTIVE=dev
 ```
 
-**Security Note:** Never commit `.env` to git. Use `.env.example` as a template.
+For production PostgreSQL (primary + standbys), also set:
 
-Docker Compose automatically loads `.env` from the project root (or from `docker/` parent directory).
+```env
+POSTGRES_REPLICATION_USER=replicator
+POSTGRES_REPLICATION_PASSWORD=your-replication-password
+```
 
-### Redis Configuration
+**Security note:** Never commit `.env` to git. Use `.env.example` as a template.
 
-Redis persistence and performance settings are configured in `docker/redis/redis.conf`:
+Docker Compose loads `.env` from the directory from which you run `docker compose`; when using the recommended commands (from project root), that is the project root.
+
+### Redis configuration
+
+Redis uses the stock `redis:8.6-alpine` image. Our `redis.conf` is mounted at `/usr/local/etc/redis/redis.conf` and passed explicitly (`redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-REDIS_PASSWORD}`) so Redis runs as a vanilla server with no bundled modules; the config file has no `include` and no `loadmodule`. Persistence and security are configured in `docker/redis/redis.conf`:
 
 - AOF persistence with `everysec` fsync
-- RDB snapshots every 15 minutes
+- RDB snapshots at 15 min, 5 min, and 1 min intervals (when keys change)
 - No eviction policy (suitable for secrets storage)
+- Password auth required
 
-## Standalone Docker (Without Compose)
+### PostgreSQL configuration
 
-If you need to run without Docker Compose:
+- **Development:** Single node via `docker-compose.postgresql.yml` or as part of the full dev stack. Image: `postgres:18.2-alpine`. No custom config file (defaults only).
+- **Production:** Multi-node (primary + 2 standbys) via `docker/postgresql/docker-compose.postgresql-production.yml`. Uses `docker/postgresql/postgresql.conf` for replication, WAL archiving, and logging. See **Production PostgreSQL** below.
 
-### Build the Docker Image
+## Production PostgreSQL (multi-node)
+
+For redundancy, run one primary and two synchronous standbys:
 
 ```bash
-# Build the JAR and extract layers for optimal caching
+# From project root. Ensure .env has POSTGRES_PASSWORD, POSTGRES_REPLICATION_PASSWORD (and optionally POSTGRES_REPLICATION_USER)
+docker compose -f docker/postgresql/docker-compose.postgresql-production.yml up -d
+```
+
+- **postgres-primary:** Read-write; port 5432; uses `postgresql/postgresql.conf`.
+- **postgres-1, postgres-2:** Read-only standbys streaming from the primary. Application names match `synchronous_standby_names` in `postgresql.conf`.
+
+Applications should connect to the primary (hostname `postgres-primary`) for read-write. See `docker/README.md` for script and network details.
+
+## Standalone Docker (without Compose)
+
+If you need to run the app container without Compose:
+
+### Build the image
+
+```bash
 ./mvnw clean package
 mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-
-# Build the Docker image
 docker build -t distributed-secrets-vault .
 ```
 
-### Run the Container
+### Run the container
 
 ```bash
 docker run -p 8080:8080 distributed-secrets-vault
 ```
 
-### With Environment Variables
+### With environment variables
 
 ```bash
 docker run -e "SPRING_PROFILES_ACTIVE=prod" \
   -e "SPRING_DATA_REDIS_HOST=redis.example.com" \
   -e "SPRING_DATA_REDIS_PASSWORD=yourpassword" \
+  -e "SPRING_DATASOURCE_URL=jdbc:postgresql://postgres.example.com:5432/dsv" \
+  -e "SPRING_DATASOURCE_USERNAME=dsv" \
+  -e "SPRING_DATASOURCE_PASSWORD=yourpostgrespassword" \
   -p 8080:8080 distributed-secrets-vault
 ```
 
 ## Development
 
-### Fast Rebuilding After Code Changes
+### Fast rebuild after code changes
 
-The layered Dockerfile enables fast rebuilds when only application code changes:
+The layered Dockerfile keeps dependency layers cached; only the app layer rebuilds when code changes:
 
 ```bash
-# Rebuild application
 ./mvnw clean package
 mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-
-# Restart with new code
-cd docker && docker compose up --build app
+docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build app
 ```
-
-Only the application layer (~5MB) rebuilds; dependencies (~45MB) remain cached.
-
-### Testing Redis Persistence
-
-TODO: create persistence testing
 
 ### Debugging
 
@@ -137,29 +178,24 @@ docker run -e "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,address=5005
   -p 8080:8080 -p 5005:5005 distributed-secrets-vault
 ```
 
-Connect your IDE debugger to `localhost:5005`
+Connect your IDE debugger to `localhost:5005`.
 
 ## Alternative: Spring Boot Buildpack
 
-Build without a Dockerfile:
+Build without the project Dockerfile:
 
 ```bash
 ./mvnw spring-boot:build-image -Dspring-boot.build-image.imageName=distributed-secrets-vault
 docker run -p 8080:8080 distributed-secrets-vault
 ```
 
-## Container Management
+## Container management
 
 ```bash
-# List running containers
 docker ps
-
-# Stop container
 docker stop <container-id>
-
-# Remove container
 docker rm <container-id>
-
-# Remove image
 docker rmi distributed-secrets-vault
 ```
+
+For more detail (structure, services, production PostgreSQL scripts), see **docker/README.md**.
