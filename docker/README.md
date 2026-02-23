@@ -2,20 +2,30 @@
 
 This directory contains all Docker-related configuration for the Distributed Secrets Vault.
 
-TODO: update this doc to reflect directory changes
-
 ## Structure
 
 ```
 docker/
-├── docker-compose.yml    # Orchestrates app + Redis
+├── dsv/
+│   ├── docker-compose.dsv.yml                    # App only
+│   ├── docker-compose.dsv-redis.yml              # App + Redis
+│   ├── docker-compose.dsv-postgresql.yml         # App + PostgreSQL
+│   └── docker-compose.dsv-redis-postgresql.yml   # App + Redis + PostgreSQL (full dev stack)
 ├── redis/
-│   └── redis.conf        # Redis persistence and security config
-└── README.md             # This file
+│   ├── docker-compose.redis.yml                  # Redis only
+│   └── redis.conf                                # Redis persistence and security config
+├── postgresql/
+│   ├── docker-compose.postgresql.yml             # PostgreSQL only (development, single node)
+│   ├── docker-compose.postgresql-production.yml  # Production: primary + 2 standbys
+│   ├── postgresql.conf                           # Production replication config (used by production compose)
+│   └── scripts/
+│       ├── init-primary.sh                       # Creates replication user (production primary)
+│       └── replica-entrypoint.sh                 # Bootstrap standbys from primary (production)
+└── README.md                                     # This file
 
 Project root:
-├── .env.example          # Environment variable template
-└── .env                  # Your local config (gitignored)
+├── .env.example                                  # Environment variable template
+└── .env                                          # Your local config (gitignored)
 ```
 
 ## Setup
@@ -26,28 +36,41 @@ Project root:
    cp .env.example .env
    ```
 
-2. **Set Redis password in `.env`:**
+2. **Set required values in `.env`:**
 
    ```env
    REDIS_PASSWORD=your-secure-password-here
+   POSTGRES_PASSWORD=your-postgres-password-here
    ```
+
+   Optionally set `POSTGRES_USER` and `POSTGRES_DB` (defaults: `dsv`).
 
 3. **Build and start from project root:**
 
    ```bash
    ./mvnw clean package
    mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-   cd docker && docker compose up --build
+   cd docker && docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up --build
    ```
 
    Note: Docker Compose automatically loads `.env` from the project root.
 
+   **Other compose files:**
+   - App only: `docker compose -f dsv/docker-compose.dsv.yml up --build`
+   - App + Redis: `docker compose -f dsv/docker-compose.dsv-redis.yml up --build`
+   - App + PostgreSQL: `docker compose -f dsv/docker-compose.dsv-postgresql.yml up --build`
+
 ## Environment Variables
 
-| Variable                 | Description                   | Default         |
-| ------------------------ | ----------------------------- | --------------- |
-| `REDIS_PASSWORD`         | Redis authentication password | `REDISPASSWORD` |
-| `SPRING_PROFILES_ACTIVE` | Spring Boot profile           | `dev`           |
+| Variable                 | Description                      | Default     |
+| ------------------------ | -------------------------------- | ----------- |
+| `REDIS_PASSWORD`          | Redis authentication password    | `REDIS_PASSWORD` |
+| `POSTGRES_USER`          | PostgreSQL user                  | `dsv`       |
+| `POSTGRES_PASSWORD`      | PostgreSQL password (required)   | —           |
+| `POSTGRES_DB`            | PostgreSQL database name         | `dsv`       |
+| `POSTGRES_REPLICATION_USER` | Replication user (production)  | `replicator` |
+| `POSTGRES_REPLICATION_PASSWORD` | Replication password (production) | —        |
+| `SPRING_PROFILES_ACTIVE` | Spring Boot profile              | `dev`       |
 
 ## Redis Configuration
 
@@ -64,40 +87,67 @@ See `redis/redis.conf` for full configuration.
 
 ### `redis`
 
-- **Image**: redis:8.4
+- **Image**: redis:8.6-alpine
 - **Ports**: 6379
 - **Volumes**: Persistent data in `redis-data` volume
+
+### `postgres`
+
+- **Image**: postgres:18.2-alpine
+- **Ports**: 5432
+- **Volumes**: Persistent data in `postgres-data` volume
+- **Healthcheck**: `pg_isready` before app starts
+- **Purpose**: User accounts; development uses a single node. For production redundancy, use the production compose (see below).
 
 ### `app`
 
 - **Build**: From parent directory Dockerfile
 - **Ports**: 8080
-- **Depends on**: Redis (waits for health check)
+- **Depends on**: Redis and/or PostgreSQL (waits for health checks when present)
 
 ## Commands
 
 ```bash
-# Start services
-docker compose up
+# Full dev stack (app + Redis + PostgreSQL) from project root
+./mvnw clean package
+mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+cd docker && docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up --build
 
 # Start in background
-docker compose up -d
+docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up -d
 
 # View logs
-docker compose logs -f app
-docker compose logs -f redis
+docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml logs -f app
+docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml logs -f redis
+docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml logs -f postgres
 
 # Stop services
-docker compose down
+docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml down
 
 # Clean slate (removes volumes)
-docker compose down -v
+docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml down -v
 
 # Rebuild after code changes
 cd .. && ./mvnw clean package && mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-cd docker && docker compose up --build
+cd docker && docker compose -f dsv/docker-compose.dsv-redis-postgresql.yml up --build
 ```
+
+## Production PostgreSQL (multi-node)
+
+For production, run one primary and two synchronous standbys for redundancy:
+
+```bash
+cd docker
+# Set in .env: POSTGRES_PASSWORD, POSTGRES_REPLICATION_USER (default: replicator), POSTGRES_REPLICATION_PASSWORD
+docker compose -f postgresql/docker-compose.postgresql-production.yml up -d
+```
+
+- **postgres-primary**: Read-write; uses `postgresql/postgresql.conf` (WAL archiving, synchronous replication). Port 5432.
+- **postgres-1**, **postgres-2**: Read-only standbys; stream from primary. Application names match `synchronous_standby_names` in `postgresql.conf` so commits wait for at least one standby.
+- Scripts: `scripts/init-primary.sh` creates the replication user on first start; `scripts/replica-entrypoint.sh` bootstraps each standby with `pg_basebackup` then starts streaming.
+
+Applications should connect to the primary (hostname `postgres-primary`) for read-write; standbys can be used for read scaling if desired.
 
 ## Network
 
-All services communicate on the `dsv-network` bridge network. The app connects to Redis using the hostname `redis`.
+All services communicate on the `dsv-network` bridge network. The app connects to Redis using the hostname `redis` and to PostgreSQL using the hostname `postgres` (dev) or `postgres-primary` (production).

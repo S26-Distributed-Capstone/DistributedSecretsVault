@@ -6,11 +6,11 @@ name: "Redis"
 
 services:
   redis:
-    image: redis:8.4
+    image: redis:8.6-alpine
     container_name: dsv-redis
     ports:
       - "6379:6379"
-    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-REDISPASSWORD}
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-REDIS_PASSWORD}
     volumes:
       - redis-data:/data
       - ../redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
