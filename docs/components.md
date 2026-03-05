@@ -24,6 +24,7 @@ It will:
   - expand `secret(NAME)` references by retrieving authoritative secret values
   - process `enc(NAME)` references by creating new secrets and returning `secret(NAME)`
 - Fail the entire `.env` request if any referenced secret already exists or cannot be resolved
+- Enforce unauthorized rejections without revealing information on internal state
 - Enforce caller-scoped isolation on reads and writes
 - Expose basic health and status endpoints
 
@@ -40,12 +41,11 @@ It will:
 - Validate and persist proposed secret creations
 - Validate and persist secret updates as new versions
 - Maintain a clear distinction between secret existence and secret updates
-- Persist multiple versions of a secret’s value
+- Persist multiple versions of its parts of a secret
 - Record validity intervals for each secret version
-- Replicate secret state to peer vault instances
+- Shard secret pieces to peer vault instances
 - Serve retrieval and history requests based on authoritative state
-- Encrypt secret values at rest using envelope encryption
-- Remain correct under partial failure
+- Remain available under partial failure (within range of accepted Shamir's recovery threshold)
 - Recover state on restart
 
 All secret state is fully replicated across vault nodes. There is no key partitioning or rebalancing.
@@ -63,11 +63,10 @@ A shared behavioral model implemented consistently across all components.
 It defines:
 
 - How callers are identified and scoped
-- What it means for a secret to exist
+- What it means for a secret to exist and be retrievable
 - The distinction between secret creation and secret update
 - How secret updates are versioned
 - How historical secret values are retained
-- How validity intervals are assigned to secret versions
 - What identifiers are used to reference secrets
 - How isolation is enforced during retrieval and history access
 - How retries and concurrent requests are handled
@@ -83,15 +82,12 @@ A required definition of how secrets are stored durably.
 
 It defines:
 
-- The stored record fields for each secret version, including ciphertext and encryption metadata
-- Envelope encryption behavior:
-  - A per-secret data key encrypts the secret value
-  - The data key is wrapped by a configured master key
-- The master key identifier stored with each record
-- The behavior when the master key is unavailable or incorrect
-- The rule that plaintext secret bytes are never written to durable storage
-
-Key rotation and key lifecycle management are not included.
+- The stored record fields for each secret version, including metadata and the shard a node is privy to
+- Shamir's Secret Keeping behavior:
+  - A password is separated on a single node into n (configured by user) parts
+  - The data is sent out to n - 1 other nodes, with 1 piece staying local to the machine that received the request directly
+- no master key required, any node can take requests to decode
+- The rule that plaintext secret bytes are never written to durable storage or passed to other nodes
 
 ---
 
@@ -105,9 +101,9 @@ It will:
 - Clearly distinguish secret creation from secret update
 - Specify duplicate and _not found_ error behavior
 - Describe durability, replication, and isolation guarantees
-- Describe encrypted-at-rest behavior and failure behavior when referenced secrets cannot be resolved
+- Describe secret-keeping and spreading behavior and failure behavior when referenced secrets cannot be resolved
 - Describe secret history retrieval semantics, including version ordering and validity timestamps
 - Describe `.env` encryption and expansion semantics, including secret creation and all-or-nothing failure
-- Hide internal replication and coordination mechanics
+- Hide internal sharding and coordination mechanics
 
 The contract exists to decouple system behavior from implementation details.
