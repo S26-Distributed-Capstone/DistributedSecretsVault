@@ -110,7 +110,7 @@ Redis uses the stock `redis:8.6-alpine` image. Our `redis.conf` is mounted at `/
 
 ### PostgreSQL configuration
 
-- **Development:** Single node via `docker-compose.postgresql.yml` or as part of the full dev stack. Image: `postgres:18.2-alpine`. No custom config file (defaults only).
+- **Development:** Single node via `docker/postgresql/docker-compose.postgresql.yml` or as part of the full dev stack. Image: `postgres:18.2-alpine`. No custom config file (defaults only).
 - **Production:** Multi-node (primary + 2 standbys) via `docker/postgresql/docker-compose.postgresql-production.yml`. Uses `docker/postgresql/postgresql.conf` for replication, WAL archiving, and logging. See **Production PostgreSQL** below.
 
 ## Production PostgreSQL (multi-node)
@@ -122,7 +122,7 @@ For redundancy, run one primary and two synchronous standbys:
 docker compose -f docker/postgresql/docker-compose.postgresql-production.yml up -d
 ```
 
-- **postgres-primary:** Read-write; port 5432; uses `postgresql/postgresql.conf`.
+- **postgres-primary:** Read-write; port 5432; uses `docker/postgresql/postgresql.conf`.
 - **postgres-1, postgres-2:** Read-only standbys streaming from the primary. Application names match `synchronous_standby_names` in `postgresql.conf`.
 
 Applications should connect to the primary (hostname `postgres-primary`) for read-write. See `docker/README.md` for script and network details.
