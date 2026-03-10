@@ -23,10 +23,19 @@ In every case the receiving node collects at least k shards (the reconstruction 
 - [4. Secret Not Found](#4-secret-not-found)
 - [5. Version Not Found](#5-version-not-found)
 - [6. Insufficient Shards](#6-insufficient-shards)
+- [7. Not Authorized to Access Secret](#7-not-authorized-to-access-secret)
+- [8. Gateway Unavailable](#8-gateway-unavailable)
+- [9. Node Unavailable](#9-node-unavailable)
+- [10. Lamport Clock Unavailable](#10-lamport-clock-unavailable)
+- [11. Local Shard Read Failure](#11-local-shard-read-failure)
+- [12. Version Enumeration Failure](#12-version-enumeration-failure)
+- [13. Shard Reconstruction Failure](#13-shard-reconstruction-failure)
 
 ---
 
-## 1. Retrieve Latest Version
+## Happy Paths
+
+### 1. Retrieve Latest Version
 
 - Client sends a GET request for a secret key without specifying a version
 - Gateway forwards the request to any cluster node (leaderless routing)
@@ -58,7 +67,7 @@ sequenceDiagram
 
 ---
 
-## 2. Retrieve Specific Version
+### 2. Retrieve Specific Version
 
 - Client sends a GET request for a secret key with an explicit version number
 - Gateway forwards the request to any cluster node
@@ -88,7 +97,7 @@ sequenceDiagram
 
 ---
 
-## 3. Retrieve All Versions
+### 3. Retrieve All Versions
 
 - Client sends a GET request for a secret key requesting all versions
 - Gateway forwards the request to any cluster node
@@ -142,5 +151,41 @@ TODO
 ---
 
 ### 7. Not Authorized to Access Secret
+
+TODO
+
+---
+
+### 8. Gateway Unavailable
+
+TODO
+
+---
+
+### 9. Node Unavailable
+
+TODO
+
+---
+
+### 10. Lamport Clock Unavailable
+
+TODO
+
+---
+
+### 11. Local Shard Read Failure
+
+TODO
+
+---
+
+### 12. Version Enumeration Failure
+
+TODO
+
+---
+
+### 13. Shard Reconstruction Failure
 
 TODO
