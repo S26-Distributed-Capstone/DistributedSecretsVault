@@ -93,4 +93,4 @@ Several issues can occur during the delete operation, leading to failures or une
 
 - **Authentication Failure (401)**: If the client lacks proper authentication, an `AuthenticationFailedException` is raised, returning a 401 Unauthorized status.
 
-- **Invalid Request (400)**: If the request body is malformed (e.g., missing `deleteName` or `deleteValue`), Spring Boot's validation may return a 400 Bad Request.
+- **Invalid Request (400)**: If the request body is malformed (e.g., missing `deleteName`), Spring Boot's validation may return a 400 Bad Request.
