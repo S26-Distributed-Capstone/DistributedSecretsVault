@@ -59,7 +59,7 @@ sequenceDiagram
 ## 2. Create two secrets
 
 - Client sends a POST request to create a new secret
-- Another client sends a POST request to create a secret with the same key
+- Client sends another a POST request to create a second secret with the same key
 - Gateway forwards each request to any cluster node (leaderless routing) (can be to the same node or different nodes, but it doesn't matter because precedence is determined by Lamport clock)
 - Node save initial timestamps in Lamport clock
 - Node run Shamir's algorithm to split the secrets into n (number of nodes in the cluster) shards
@@ -72,10 +72,10 @@ sequenceDiagram
 - Continues with the shard that came first, aborts for the shard that came second
 - Node waits for confirmation from m (a number in between k and n and more than n-m) nodes (2 Phase Commit) for each secret
 - Node times out waiting for later created secret
-- Node sends error message through gateway back to user that the later secret creation failed
+- Node sends error message through gateway back to client that the later secret creation failed
 - Node sends message to nodes to persist any shard for the earlier created secret that is being temporarily stored
 - Node persists shard that it is temporarily storing for earlier created secret
-- Confirmation sent back to user who's secret was created
+- Confirmation sent back for the secret which was created
 
 ```mermaid
 sequenceDiagram
@@ -85,7 +85,7 @@ sequenceDiagram
     participant Peers as Other Nodes
     participant Clock as Lamport Clock
 
-    par User 1
+    par Secret 1
       User->>Gateway: POST /secret {key,value}
       Gateway->>Node: Forward request
       Node->>Clock: Save intial timestamp
@@ -100,8 +100,9 @@ sequenceDiagram
       Clock-->>Node: Clock confirms this user request came first
       Node->>Node: Node adds a confirmation to the count of the other nodes
       Peers-->>Node: Return confirmation
-    and User 2
-      User->>Gateway: Another POST /secret {same key,value (could be different)}
+      Node->>Node: Wait for conformation from m nodes
+    and Secret 2
+      User->>Gateway: POST /secret {same key as secret 1,value (could be different)}
       Gateway->>Node: Forward request
       Node->>Clock: Save intial timestamp
       Clock-->>Node: Send back conformation
@@ -116,15 +117,16 @@ sequenceDiagram
       Node->>Node: Wait for conformation from m nodes
       Node-->>Gateway: Send error message
       break after error message is sent to user
-        Gateway-->>User: "Secret from User 2 failed to create"
+        Gateway-->>User: "Secret 2 failed to create"
       end
     end
     Node->>Peers: Tell nodes to persist shards
     Peers-->>Node: Send back confirmation
     Node->>Node: Persist shard
     Node-->>Gateway: Return confirmation that secret was created
-    Gateway-->>User: "Secret from User 1 Created"
+    Gateway-->>User: "Secret 1 Created"
 ```
 
 ---
+
 
