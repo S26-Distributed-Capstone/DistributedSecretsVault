@@ -115,7 +115,7 @@ sequenceDiagram
       Node->>Clock: If key is already in temporary storage on the node, check clock to see which one came first
       Clock-->>Node: Clock says this user request came second
       Node->>Node: Wait for conformation from m nodes
-      Node-->>Gateway: Send error message
+      Node-->>Gateway: Send error message upon timeout
       break after error message is sent to user
         Gateway-->>User: "Secret 2 failed to create"
       end
@@ -128,5 +128,6 @@ sequenceDiagram
 ```
 
 ---
+
 
 
