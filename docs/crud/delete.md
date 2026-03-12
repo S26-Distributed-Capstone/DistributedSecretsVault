@@ -1,8 +1,15 @@
 # Deleting a Secret
 
-## Happy-Path Usage
-
 In the Distributed Secrets Vault application, a client can delete a secret by sending an HTTP DELETE request to the endpoint `?`. The request must contain a `deleteName` field specifying the name of the secret to be deleted.
+
+---
+
+## Table of Contents
+- [Happy Path](#happy-path)
+- [Error Cases](#error-cases)
+
+## Happy-Path
+
 
 **Steps for the client:**
 1. Authenticate with the system.
@@ -86,7 +93,7 @@ flowchart TD
     Q -.-> S["Success Response"]
 ```
 
-## Potential Issues
+## Error Cases
 
 Several issues can occur during the delete operation, leading to failures or unexpected behavior:
 - **Secret Not Found (404)**: If the `deleteName` does not correspond to an existing secret, a `SecretNotFoundException` is thrown, resulting in a 404 response with an error message like "Secret not found". This prevents deletion of non-existent secrets.
