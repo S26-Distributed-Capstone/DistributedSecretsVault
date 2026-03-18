@@ -134,58 +134,108 @@ sequenceDiagram
 
 ### 4. Secret Not Found
 
-TODO
+- **When it happens**: The key has no recorded versions for the authenticated user.
+- **Handling**:
+    - Receiving node checks local metadata first, then consults peers only if metadata is uncertain.
+    - If no node can confirm any version for the key, return `404 Not Found` with a stable error code.
+    - Do not leak existence across tenants; errors should be scoped to the authenticated user.
+    - Cache the negative lookup briefly to reduce repeated fan-out.
 
 ---
 
 ### 5. Version Not Found
 
-TODO
+- **When it happens**: The key exists, but the requested version does not.
+- **Handling**:
+    - Validate the requested version against version metadata (local + quorum) before shard fetch.
+    - If the version is missing in a majority of metadata sources, return `404 Not Found`.
+    - Include the latest known version in the response body (not headers) when safe to help clients recover.
+    - Avoid reconstruct attempts for unknown versions to reduce load.
 
 ---
 
 ### 6. Insufficient Shards
 
-TODO
+- **When it happens**: Fewer than k shards are available due to node loss, partition, or read failures.
+- **Handling**:
+    - Attempt reads from additional peers until the shard budget is exhausted or k shards are collected.
+    - If k shards cannot be assembled, return `503 Service Unavailable` with a retryable error code.
+    - Include a `Retry-After` hint based on recent cluster health.
+    - Record a quorum health event for operator visibility.
 
 ---
 
 ### 7. Not Authorized to Access Secret
 
-TODO
+- **When it happens**: Authentication fails or authorization rules deny access.
+- **Handling**:
+    - Reject early at the gateway when possible; nodes still enforce authorization on every request.
+    - Return `401 Unauthorized` for invalid/expired credentials, `403 Forbidden` for valid but insufficient access.
+    - Do not indicate whether the secret exists.
+    - Audit log the denial with request metadata (no plaintext).
 
 ---
 
 ### 8. Gateway Unavailable
 
-TODO
+- **When it happens**: The gateway is unreachable or returns errors to the client.
+- **Handling**:
+    - Clients should retry with exponential backoff and jitter.
+    - Gateways should be stateless and horizontally scaled behind a load balancer.
+    - Use health checks and circuit breakers to avoid routing to unhealthy gateways.
+    - Return `503 Service Unavailable` when the gateway is overloaded.
 
 ---
 
 ### 9. Node Unavailable
 
-TODO
+- **When it happens**: The target node is down or unreachable.
+- **Handling**:
+    - Gateway retries on another node; routing is leaderless.
+    - Node-to-node shard requests use timeouts and fall back to other peers.
+    - If a receiving node cannot reach enough peers to reach k shards, treat as insufficient shards.
+    - Track node health and quarantine flapping nodes temporarily.
 
 ---
 
 ### 10. Lamport Clock Unavailable
 
-TODO
+- **When it happens**: The service used to resolve the latest version is unreachable or inconsistent.
+- **Handling**:
+    - For latest-version requests, attempt a quorum read of version metadata as a fallback.
+    - If the latest version cannot be resolved safely, return `503 Service Unavailable` with a retryable error code.
+    - For explicit version requests, bypass the clock entirely.
+    - Emit a health signal for clock availability.
 
 ---
 
 ### 11. Local Shard Read Failure
 
-TODO
+- **When it happens**: Local storage returns an error or corrupted shard data.
+- **Handling**:
+    - Retry the local read once if the error is transient.
+    - If still failing, fetch a replacement shard from a peer if redundancy allows.
+    - If k shards can still be assembled, proceed; otherwise return `503 Service Unavailable`.
+    - Mark the local shard as suspect and trigger background repair.
 
 ---
 
 ### 12. Version Enumeration Failure
 
-TODO
+- **When it happens**: The node cannot list versions due to metadata or storage errors.
+- **Handling**:
+    - Retry with bounded backoff and, if configured, query peer metadata.
+    - If enumeration still fails, return `503 Service Unavailable` with a retryable error code.
+    - Do not partially return results unless explicitly requested by the client.
+    - Emit an error metric tagged by storage backend.
 
 ---
 
 ### 13. Shard Reconstruction Failure
 
-TODO
+- **When it happens**: Collected shards fail integrity checks or reconstruction cannot complete.
+- **Handling**:
+    - Validate shard checksums and reject mismatched shards.
+    - Attempt to replace bad shards by querying additional peers.
+    - If reconstruction still fails, return `500 Internal Server Error` for integrity failures or `503` if insufficient good shards.
+    - Log and quarantine offending shards for investigation.
