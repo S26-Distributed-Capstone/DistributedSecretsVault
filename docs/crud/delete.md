@@ -7,9 +7,11 @@ In the Distributed Secrets Vault application, a client can delete a secret by se
 ## Table of Contents
 - [Happy Path](#happy-path)
 - [Error Cases](#error-cases)
+- [Process Flowchart](#process-flowchart-delete-operation-logic)
+
+---
 
 ## Happy-Path
-
 
 **Steps for the client:**
 1. Authenticate with the system.
@@ -70,7 +72,16 @@ sequenceDiagram
     deactivate Controller
 ```
 
-### Process Flowchart: Delete Operation Logic
+## Error Cases
+
+Several issues can occur during the delete operation, leading to failures or unexpected behavior:
+- **Secret Not Found (404)**: If the `deleteName` does not correspond to an existing secret, a `SecretNotFoundException` is thrown, resulting in a 404 response with an error message like "Secret not found". This prevents deletion of non-existent secrets.
+
+- **Authentication Failure (401)**: If the client lacks proper authentication, an `AuthenticationFailedException` is raised, returning a 401 Unauthorized status.
+
+- **Invalid Request (400)**: If the request body is malformed (e.g., missing `deleteName`), Spring Boot's validation may return a 400 Bad Request.
+
+## Process Flowchart: Delete Operation Logic
 
 ```mermaid
 flowchart TD
@@ -92,12 +103,3 @@ flowchart TD
     L -.-> R
     Q -.-> S["Success Response"]
 ```
-
-## Error Cases
-
-Several issues can occur during the delete operation, leading to failures or unexpected behavior:
-- **Secret Not Found (404)**: If the `deleteName` does not correspond to an existing secret, a `SecretNotFoundException` is thrown, resulting in a 404 response with an error message like "Secret not found". This prevents deletion of non-existent secrets.
-
-- **Authentication Failure (401)**: If the client lacks proper authentication, an `AuthenticationFailedException` is raised, returning a 401 Unauthorized status.
-
-- **Invalid Request (400)**: If the request body is malformed (e.g., missing `deleteName`), Spring Boot's validation may return a 400 Bad Request.
