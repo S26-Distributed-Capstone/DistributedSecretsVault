@@ -33,7 +33,7 @@ graph LR
 
 ---
 
-3. A User puts a secret in the storage
+3. A User puts a new secret in the storage
 
 - Client sends the secret with the secret's key to any cluster node
 - Receiving node applies Shamir's Secret Sharing in memory, splitting the secret into n shards
@@ -49,7 +49,7 @@ sequenceDiagram
     participant Node as Cluster Node
     participant Cluster as Other Nodes
 
-    User->>Gateway: PUT /secret {key, value}
+    User->>Gateway: POST /secret {key, value}
     Gateway->>Node: Forward request
     Node->>Node: Split secret into n shards (in memory)<br/>Plaintext never written to disk
     Node->>Cluster: Distribute n-1 shards (encrypted in transit)
