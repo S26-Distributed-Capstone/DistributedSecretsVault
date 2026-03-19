@@ -5,5 +5,4 @@ import lombok.Data;
 @Data
 public class DeleteSecretRequest {
     private final String deleteName;
-    private final String deleteValue;
 }
