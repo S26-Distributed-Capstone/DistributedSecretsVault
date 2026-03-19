@@ -13,12 +13,10 @@ A client can update a secret only if a secret with that key already exists. The 
 
 **Error Cases**
 - [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
-- [4. Key does not exist on the receiving node](#4-key-does-not-exist-on-the-receiving-node)
-- [5. Key does not exist on another node](#5-key-does-not-exist-on-another-node)
-- [6. Clock does not return version](#6-clock-does-not-return-version)
-- [7. M nodes do not send back confirmation for receiving update](#7-m-nodes-do-not-send-back-confirmation-for-receiving-update)
-- [8. M nodes do not send back confirmation for persisting update](#8-m-nodes-do-not-send-back-confirmation-for-persisting-update)
-- [9. Client does not receive response](#9-client-does-not-receive-response)
+- [4. Clock does not return version](#4-clock-does-not-return-version)
+- [5. M nodes do not send back confirmation for receiving update](#5-m-nodes-do-not-send-back-confirmation-for-receiving-update)
+- [6. M nodes do not send back confirmation for persisting update](#6-m-nodes-do-not-send-back-confirmation-for-persisting-update)
+- [7. Client does not receive response](#7-client-does-not-receive-response)
 ---
 
 ## 1. Update one secret
@@ -38,13 +36,12 @@ sequenceDiagram
 
     User->>Gateway: PUT /secret {key,newValue}
     Gateway->>Node: Forward request into cluster, one node accepts
-    Node->>Node: Check whether key is persisted locally
     Node->>Clock: Request Lamport version assignment and timestamp
     Clock-->>Node: Return assigned version and timestamp
     Node->>Node: Split updated secret into n shards using Shamir's algorithm
     Node->>Peers: Send update shards with key and version
     Peers->>Peers: Store shard temporarily and check key/version state
-    Node->>Node: Add local confirmation
+    Node->>Node: Add local confirmation if key is persisted locally
     Peers-->>Node: Return confirmation if update is valid
     Node->>Node: Wait for confirmations from m nodes
     Node->>Peers: Submit persistence request for new version
@@ -76,27 +73,25 @@ sequenceDiagram
     par Update 1
       User->>Gateway: PUT /secret {key,valueA}
       Gateway->>Node: Forward request into cluster, one node accepts
-      Node->>Node: Check key exists and latest version
       Node->>Clock: Request Lamport version assignment and timestamp
       Clock-->>Node: Return assigned version V+1 and timestamp T1
       Node->>Node: Split updated secret into n shards
       Node->>Peers: Send update shards for version V+1
       Peers->>Peers: Store shard temporarily and check key/version state.<br>This update arrived first
-      Node->>Node: Check temporary key/version state.<br>This update arrived first
+      Node->>Node: Check persisted and temporary key/version state.<br>This update arrived first
       Node->>Node: Add local confirmation
       Peers-->>Node: Return confirmation for version V+1
       Node->>Node: Wait for confirmations from m nodes
     and Update 2
       User->>Gateway: PUT /secret {same key, valueB}
       Gateway->>Node: Forward request into cluster, one node accepts
-      Node->>Node: Check key exists and latest version
       Node->>Clock: Request Lamport version assignment and timestamp
       Clock-->>Node: Return competing version data
       Node->>Node: Split updated secret into n shards
       Node->>Peers: Send update shards for same key
       Peers->>Peers: Store shard temporarily and check key/version state.<br>This update arrived second
       Peers-->>Node: Send failure on version conflict
-      Node->>Node: Check temporary key/version state.<br>This update arrived second
+      Node->>Node: Check persisted and temporary key/version state.<br>This update arrived second
       Node->>Node: Wait for confirmations from m nodes
       Node-->>Gateway: Send error on failure response(s) or timeout
       break after error is sent to user
@@ -122,23 +117,7 @@ sequenceDiagram
 
 ---
 
-## 4. Key does not exist on the receiving node
-
-- The receiving node checks local persisted data before creating an updated version.
-- If the key does not exist locally, update is rejected immediately.
-- The client receives: "Secret update failed - key does not exist".
-
----
-
-## 5. Key does not exist on another node
-
-- The request may pass the initial local check but fail during peer validation.
-- If peers cannot confirm existing key state or report that the key is missing, the update operation is aborted.
-- The client receives: "Secret update failed - key does not exist", and temporary update shards are cleaned up.
-
----
-
-## 6. Clock does not return version
+## 4. Clock does not return version
 
 - The node requests the next Lamport version and timestamp before splitting and distributing shards.
 - If the clock does not return version metadata before timeout, update cannot continue.
@@ -146,7 +125,7 @@ sequenceDiagram
 
 ---
 
-## 7. M nodes do not send back confirmation for receiving update
+## 5. M nodes do not send back confirmation for receiving update
 
 - After update-shard distribution, the node must receive receive-phase confirmations from at least m nodes.
 - If quorum is not reached before timeout, the node retries and updates the confirmation count.
@@ -154,7 +133,7 @@ sequenceDiagram
 
 ---
 
-## 8. M nodes do not send back confirmation for persisting update
+## 6. M nodes do not send back confirmation for persisting update
 
 - The operation reaches the persist phase but does not receive persistence confirmations from m nodes.
 - The node retries confirmation collection; if the threshold is still unmet, it issues cleanup deletes for partially persisted new-version shards.
@@ -162,7 +141,7 @@ sequenceDiagram
 
 ---
 
-## 9. Client does not receive response
+## 7. Client does not receive response
 
 - The secret update flow can complete on the cluster, but the client may not receive the final response.
 - After client-side timeout, the client retries the request.
