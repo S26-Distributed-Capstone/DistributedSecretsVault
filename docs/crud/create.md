@@ -23,10 +23,10 @@ A client can create a secret only if no secret with the same key already exists.
 
 ## 1. Create one secret
 
-- A client creates a secret through the gateway, which forwards the request to any cluster node.
-- The node validates that the key does not already exist, gets a Lamport version, and splits the secret into n shards.
-- Shards are distributed and temporarily stored; creation proceeds only after m nodes confirm no key conflict.
-- The node then commits persistence across nodes and returns success after m persistence confirmations.
+- A client submits a secret through the gateway, and the gateway forwards the request into the cluster where one node picks it up.
+- The receiving node validates that the key does not already exist, obtains an assigned Lamport version and timestamp, and splits the secret into n shards.
+- The receiving node sends shards to peers, and each node stores its shard in temporary in-memory state so conflicts can be resolved before durable writes.
+- The receiving node then submits a persistence request to all nodes and returns success after m persistence confirmations.
 
 ```mermaid
 sequenceDiagram
@@ -37,17 +37,17 @@ sequenceDiagram
     participant Clock as Lamport Clock
 
     User->>Gateway: POST /secret {key,value}
-    Gateway->>Node: Forward request
+    Gateway->>Node: Forward request into cluster; one node accepts
     Node->>Node: Check whether key is already persisted locally
-    Node->>Clock: Request initial timestamp
-    Clock-->>Node: Return timestamp and version
+    Node->>Clock: Request Lamport version assignment and timestamp
+    Clock-->>Node: Return assigned version and timestamp
     Node->>Node: Split secret into n shards using Shamir's algorithm
     Node->>Peers: Send n-1 shards to other nodes
-    Peers->>Peers: Check whether key already exists
+    Peers->>Peers: Store shard temporarily and check key state
     Node->>Node: Add local confirmation
     Peers-->>Node: Return confirmation if key is not persisted
     Node->>Node: Wait for confirmations from m nodes
-    Node->>Peers: Instruct nodes to persist shards
+    Node->>Peers: Submit persistence request for shards
     Node->>Node: Persist local shard
     Peers->>Peers: Persist shards
     Peers-->>Node: Send persistence confirmation
@@ -75,26 +75,26 @@ sequenceDiagram
 
     par Secret 1
       User->>Gateway: POST /secret {key,value}
-      Gateway->>Node: Forward request
+      Gateway->>Node: Forward request into cluster; one node accepts
       Node->>Node: Check whether key is already persisted locally
-      Node->>Clock: Request initial timestamp
-      Clock-->>Node: Return timestamp and version
+      Node->>Clock: Request Lamport version assignment and timestamp
+      Clock-->>Node: Return assigned version and timestamp
       Node->>Node: Split secret into n shards using Shamir's algorithm
       Node->>Peers: Send n-1 shards to other nodes
-      Peers->>Peers: Check persisted and temporary key state.<br>Key is in temporary storage, and this request came first
+      Peers->>Peers: Store shard temporarily and check key state.<br>Key is in temporary storage, and this request came first
       Node->>Node: Check temporary key state.<br>Key is in temporary storage, and this request came first
       Node->>Node: Add local confirmation
       Peers-->>Node: Return confirmation because key is not persisted
       Node->>Node: Wait for confirmations from m nodes
     and Secret 2
       User->>Gateway: POST /secret {same key as secret 1, value (may differ)}
-      Gateway->>Node: Forward request
+      Gateway->>Node: Forward request into cluster; one node accepts
       Node->>Node: Check whether key is already persisted locally
-      Node->>Clock: Request initial timestamp
-      Clock-->>Node: Return timestamp and version
+      Node->>Clock: Request Lamport version assignment and timestamp
+      Clock-->>Node: Return assigned version and timestamp
       Node->>Node: Split secret into n shards using Shamir's algorithm
       Node->>Peers: Send n-1 shards to other nodes
-      Peers->>Peers: Check persisted and temporary key state.<br>Key is in temporary storage, and this request came second
+      Peers->>Peers: Store shard temporarily and check key state.<br>Key is in temporary storage, and this request came second
       Peers-->>Node: Send failure if secret already exists
       Node->>Node: Check temporary key state.<br>Key is in temporary storage, and this request came second
       Node->>Node: Wait for confirmations from m nodes
@@ -103,7 +103,7 @@ sequenceDiagram
         Gateway-->>User: "Secret 2 failed to create"
       end
     end
-    Node->>Peers: Instruct nodes to persist shards
+    Node->>Peers: Submit persistence request for shards
     Node->>Node: Persist local shard
     Peers->>Peers: Persist shards
     Peers-->>Node: Send persistence confirmation
