@@ -1,6 +1,6 @@
 # Update Secret
 
-A client can update a secret only if a secret with that key already exists. The update creates a new version with a fresh timestamp and is not committed until confirmations are received from m nodes (where m is between k and n).
+A client can update a secret only if a secret with that key already exists. The update creates a new version with a fresh timestamp and is not durably persisted until confirmations are received from m nodes (where m is between k and n).
 
 ---
 
@@ -23,10 +23,10 @@ A client can update a secret only if a secret with that key already exists. The 
 
 ## 1. Update one secret
 
-- A client updates a secret through the gateway, which forwards the request to any cluster node.
-- The node validates that the key already exists, gets a Lamport version and timestamp for the next version, and splits the updated secret into n shards.
-- Shards are distributed and temporarily stored; update proceeds only after m nodes confirm the key exists and the incoming version can be accepted.
-- The node then commits the new version across nodes and returns success after m persistence confirmations.
+- A client submits an updated secret through the gateway, and the gateway forwards the request into the cluster where one node picks it up.
+- The receiving node validates that the key already exists, obtains an assigned Lamport version and timestamp for the new version, and splits the updated secret into n shards.
+- The receiving node sends update shards to peers, and each node stores its shard in temporary in-memory state so conflicts can be resolved before durable writes.
+- The receiving node then submits a persistence request for the new version to all nodes and returns success after m persistence confirmations.
 
 ```mermaid
 sequenceDiagram
@@ -37,17 +37,17 @@ sequenceDiagram
     participant Clock as Lamport Clock
 
     User->>Gateway: PUT /secret {key,newValue}
-    Gateway->>Node: Forward request
+    Gateway->>Node: Forward request into cluster; one node accepts
     Node->>Node: Check whether key is persisted locally
-    Node->>Clock: Request next Lamport version and timestamp
-    Clock-->>Node: Return new version and timestamp
+    Node->>Clock: Request Lamport version assignment and timestamp
+    Clock-->>Node: Return assigned version and timestamp
     Node->>Node: Split updated secret into n shards using Shamir's algorithm
     Node->>Peers: Send update shards with key and version
-    Peers->>Peers: Check whether key exists and version can be accepted
+    Peers->>Peers: Store shard temporarily and check key/version state
     Node->>Node: Add local confirmation
     Peers-->>Node: Return confirmation if update is valid
     Node->>Node: Wait for confirmations from m nodes
-    Node->>Peers: Instruct nodes to persist new version
+    Node->>Peers: Submit persistence request for new version
     Node->>Node: Persist local versioned shard
     Peers->>Peers: Persist versioned shards
     Peers-->>Node: Send persistence confirmation
@@ -75,26 +75,26 @@ sequenceDiagram
 
     par Update 1
       User->>Gateway: PUT /secret {key,valueA}
-      Gateway->>Node: Forward request
+      Gateway->>Node: Forward request into cluster; one node accepts
       Node->>Node: Check key exists and latest version
-      Node->>Clock: Request next version and timestamp
-      Clock-->>Node: Return version V+1 and timestamp T1
+      Node->>Clock: Request Lamport version assignment and timestamp
+      Clock-->>Node: Return assigned version V+1 and timestamp T1
       Node->>Node: Split updated secret into n shards
       Node->>Peers: Send update shards for version V+1
-      Peers->>Peers: Check persisted and temporary key/version state.<br>This update arrived first
+      Peers->>Peers: Store shard temporarily and check key/version state.<br>This update arrived first
       Node->>Node: Check temporary key/version state.<br>This update arrived first
       Node->>Node: Add local confirmation
       Peers-->>Node: Return confirmation for version V+1
       Node->>Node: Wait for confirmations from m nodes
     and Update 2
       User->>Gateway: PUT /secret {same key, valueB}
-      Gateway->>Node: Forward request
+      Gateway->>Node: Forward request into cluster; one node accepts
       Node->>Node: Check key exists and latest version
-      Node->>Clock: Request next version and timestamp
+      Node->>Clock: Request Lamport version assignment and timestamp
       Clock-->>Node: Return competing version data
       Node->>Node: Split updated secret into n shards
       Node->>Peers: Send update shards for same key
-      Peers->>Peers: Check persisted and temporary key/version state.<br>This update arrived second
+      Peers->>Peers: Store shard temporarily and check key/version state.<br>This update arrived second
       Peers-->>Node: Send failure on version conflict
       Node->>Node: Check temporary key/version state.<br>This update arrived second
       Node->>Node: Wait for confirmations from m nodes
@@ -103,7 +103,7 @@ sequenceDiagram
         Gateway-->>User: "Update 2 failed"
       end
     end
-    Node->>Peers: Instruct nodes to persist version V+1
+    Node->>Peers: Submit persistence request for version V+1
     Node->>Node: Persist local versioned shard
     Peers->>Peers: Persist versioned shards
     Peers-->>Node: Send persistence confirmation
@@ -116,7 +116,7 @@ sequenceDiagram
 
 ## 3. Gateway unable to forward request to node
 
-- The gateway attempts to forward an update request to a cluster node.
+- The gateway attempts to forward an update request into the cluster so a node can pick it up.
 - If forwarding times out, the gateway retries with another node.
 - After repeated timeouts, the gateway returns: "Could not forward request to node".
 
