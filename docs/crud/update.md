@@ -37,7 +37,7 @@ sequenceDiagram
     participant Clock as Lamport Clock
 
     User->>Gateway: PUT /secret {key,newValue}
-    Gateway->>Node: Forward request into cluster; one node accepts
+    Gateway->>Node: Forward request into cluster, one node accepts
     Node->>Node: Check whether key is persisted locally
     Node->>Clock: Request Lamport version assignment and timestamp
     Clock-->>Node: Return assigned version and timestamp
@@ -75,7 +75,7 @@ sequenceDiagram
 
     par Update 1
       User->>Gateway: PUT /secret {key,valueA}
-      Gateway->>Node: Forward request into cluster; one node accepts
+      Gateway->>Node: Forward request into cluster, one node accepts
       Node->>Node: Check key exists and latest version
       Node->>Clock: Request Lamport version assignment and timestamp
       Clock-->>Node: Return assigned version V+1 and timestamp T1
@@ -88,7 +88,7 @@ sequenceDiagram
       Node->>Node: Wait for confirmations from m nodes
     and Update 2
       User->>Gateway: PUT /secret {same key, valueB}
-      Gateway->>Node: Forward request into cluster; one node accepts
+      Gateway->>Node: Forward request into cluster, one node accepts
       Node->>Node: Check key exists and latest version
       Node->>Clock: Request Lamport version assignment and timestamp
       Clock-->>Node: Return competing version data
