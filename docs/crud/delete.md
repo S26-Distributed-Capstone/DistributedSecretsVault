@@ -7,7 +7,6 @@ In the Distributed Secrets Vault application, a client can delete a secret by se
 ## Table of Contents
 - [Happy Path](#happy-path)
 - [Error Cases](#error-cases)
-- [Process Flowchart](#process-flowchart-delete-operation-logic)
 
 ---
 
@@ -80,26 +79,3 @@ Several issues can occur during the delete operation, leading to failures or une
 - **Authentication Failure (401)**: If the client lacks proper authentication, an `AuthenticationFailedException` is raised, returning a 401 Unauthorized status.
 
 - **Invalid Request (400)**: If the request body is malformed (e.g., missing `deleteName`), Spring Boot's validation may return a 400 Bad Request.
-
-## Process Flowchart: Delete Operation Logic
-
-```mermaid
-flowchart TD
-    A["Client sends DELETE request<br/>with deleteName & deleteValue"] --> B["SecretController receives request"]
-    B --> C{"Valid request<br/>structure?"}
-    C -->|No| D["Return 400 Bad Request"]
-    C -->|Yes| E["Extract DeleteSecretRequest"]
-    E --> F["Validate authentication"]
-    F -->|Failed| G["Return 401 Unauthorized"]
-    F -->|Success| H["Pass to DeleteSecretService"]
-    H --> I["Broadcast delete shard request<br/>to all cluster nodes"]
-    I --> J["Collect responses from nodes"]
-    J --> K{"Received enough<br/>responses?"}
-    K -->|No| L["Return 404 Secret Not Found"]
-    K -->|Yes| M["Confirm deletion on all nodes"]
-    M --> Q["Return 204 No Content"]
-    D -.-> R["Error Response"]
-    G -.-> R
-    L -.-> R
-    Q -.-> S["Success Response"]
-```
