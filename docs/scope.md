@@ -8,7 +8,7 @@ You will build a distributed secrets vault system. It includes running services 
 
 ### 1. Secrets API Service
 
-A long-running HTTP service that accepts requests for creating, updating, and retrieving secrets.
+A long-running HTTP service that accepts requests for creating, updating, retrieving, and deleting secrets.
 
 It will:
 
@@ -20,6 +20,8 @@ It will:
 - Reject update requests for secrets that do not exist
 - Accept secret retrieval requests for previously stored secrets
 - Accept requests to retrieve the version history of a secret
+- Accept secret **delete** requests that remove enough stored shards to make reconstruction impossible
+- Reject delete requests for secrets that do not exist
 - Accept `.env` file content and:
   - expand `secret(NAME)` references by retrieving authoritative secret values
   - process `enc(NAME)` references by creating new secrets and returning `secret(NAME)`
@@ -40,15 +42,14 @@ It will:
 
 - Validate and persist proposed secret creations
 - Validate and persist secret updates as new versions
+- Validate and execute secret deletes using a threshold-based deletion rule
 - Maintain a clear distinction between secret existence and secret updates
 - Persist multiple versions of its parts of a secret
 - Record validity intervals for each secret version
 - Shard secret pieces to peer vault instances
-- Serve retrieval and history requests based on authoritative state
+- Serve retrieval, history, and delete requests based on authoritative state
 - Remain available under partial failure (within range of accepted Shamir's recovery threshold)
 - Recover state on restart
-
-All secret state is fully replicated across vault nodes. There is no key partitioning or rebalancing.
 
 ---
 
@@ -67,6 +68,7 @@ It defines:
 - The distinction between secret creation and secret update
 - How secret updates are versioned
 - How historical secret values are retained
+- How secret deletion is defined and when a secret is considered non-reconstructable
 - What identifiers are used to reference secrets
 - How isolation is enforced during retrieval and history access
 - How retries and concurrent requests are handled
@@ -99,6 +101,7 @@ It will:
 
 - Define request and response formats
 - Clearly distinguish secret creation from secret update
+- Define delete request and response behavior, including threshold-based deletion success criteria
 - Specify duplicate and _not found_ error behavior
 - Describe durability, replication, and isolation guarantees
 - Describe secret-keeping and spreading behavior and failure behavior when referenced secrets cannot be resolved

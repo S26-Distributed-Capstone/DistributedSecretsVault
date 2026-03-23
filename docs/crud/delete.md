@@ -23,8 +23,8 @@ In the Distributed Secrets Vault application, a client can delete a secret by se
 2. It validates the request and passes it to the `DeleteSecretService`.
 3. The `DeleteSecretService` broadcasts the delete request to all nodes in the cluster.
 4. Each node checks its local storage for a shard for the secret with the name `deleteName` and deletes it, responding with an acknowledgment of the deletion.
-5. The `DeleteSecretService` collects responses from all nodes, ideally receiving an ACK from each one. If `timeout` seconds have passed and the number of missing ACKs is less than `k`, the service considers the deletion successful.
-6. If the deletion is successful, the service returns a 204 No Content response to the client. If the secret is not found or the number of missing ACKs exceeds `k`, the service returns an appropriate error response.
+5. The `DeleteSecretService` collects responses from all nodes, ideally receiving an ACK from each one. If `timeout` seconds have passed and at least `m - k + 1` delete ACKs are confirmed (the m-k deletion threshold), the service considers the deletion successful because fewer than `k` of the originally persisted `m` shards can remain.
+6. If the deletion is successful, the service returns a 204 No Content response to the client. If the secret is not found or the number of delete ACKs is below the `m - k + 1` threshold, the service returns an appropriate error response.
 
 ### Sequence Diagram: Happy-Path Delete Flow
 

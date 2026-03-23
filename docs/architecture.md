@@ -66,8 +66,7 @@ sequenceDiagram
 
 - Client requests the secret using the secret's unique key and version
 - The user may request all versions of a secret, which will return a map of version to secret value
-- Receiving node requests k shards from other nodes (minimum threshold to reconstruct)
-- Node retrieves its own local shard from storage
+- Receiving node requests k - 1 shards from nodes, and gets one from itself (minimum threshold to reconstruct)
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (requires k of n shards)
 - **Plaintext exists only in memory during reconstruction, never written to disk**
 - Node returns the secret value to the client and clears it from memory
@@ -122,7 +121,33 @@ sequenceDiagram
 
 ---
 
-6. Cluster node stores its parts in a map
+6. A user deletes a stored secret
+
+- Client sends a delete request for a secret key to any cluster node
+- Receiving node broadcasts delete to nodes storing shards for that key
+- Deletion is considered successful once at least `m-k+1` delete acknowledgments are confirmed
+- This guarantees fewer than `k` persisted shards can remain, so reconstruction is no longer possible
+- The client receives success only after the threshold is met
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gateway
+    participant Node as Cluster Node
+    participant Cluster as Other Nodes
+
+    User->>Gateway: DELETE /secret {key}
+    Gateway->>Node: Forward delete request
+    Node->>Cluster: Broadcast delete for key shards
+    Cluster-->>Node: Delete ACKs
+    Node->>Node: Verify ACK count >= m-k+1
+    Node-->>Gateway: Success (non-reconstructable)
+    Gateway-->>User: Secret deleted
+```
+
+---
+
+7. Cluster node stores its parts in a map
 
 - Each node maps user:key:version to its assigned shard
 - No node has enough information to reconstruct a secret alone
@@ -159,7 +184,7 @@ graph LR
 
 ---
 
-7. Node failure detection
+8. Node failure detection
 
 - Use logging with heartbeats and gossip to determine node status
 
@@ -189,6 +214,6 @@ sequenceDiagram
 
 ---
 
-8. Node failure recovery
+9. Node failure recovery
 
 - TODO: finalize the approach
