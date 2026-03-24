@@ -33,10 +33,14 @@ graph LR
 
 ---
 
-3. A User puts a secret in the storage
+3. A User puts a new secret in the storage
 
-- Send the secret with the secret's key to the cluster
-- Cluster uses Shamir's secret sharing algorithm and then spreads parts of the secret
+- Client sends the secret with the secret's key to any cluster node
+- Receiving node applies Shamir's Secret Sharing in memory, splitting the secret into n shards
+- Node distributes n-1 shards to other nodes and keeps 1 shard locally
+- k shards are required to reconstruct the secret (threshold scheme)
+- **Plaintext secret is never written to durable storage or passed between nodes**
+- No master key is required; secrets are protected by distribution
 
 ```mermaid
 sequenceDiagram
@@ -45,10 +49,12 @@ sequenceDiagram
     participant Node as Cluster Node
     participant Cluster as Other Nodes
 
-    User->>Gateway: PUT /secret {key, value}
+    User->>Gateway: POST /secret {key, value}
     Gateway->>Node: Forward request
-    Node->>Node: Apply Shamir's Secret Sharing
-    Node->>Cluster: Distribute secret parts
+    Node->>Node: Split secret into n shards (in memory)<br/>Plaintext never written to disk
+    Node->>Cluster: Distribute n-1 shards (encrypted in transit)
+    Node->>Node: Store local shard to disk
+    Cluster->>Cluster: Store received shards to disk
     Cluster-->>Node: ACK
     Node-->>Gateway: Success + Version
     Gateway-->>User: Secret stored (version)
@@ -58,10 +64,12 @@ sequenceDiagram
 
 4. A user gets a stored secret from the storage
 
-- Request the secret using the secret's unique key and version
+- Client requests the secret using the secret's unique key and version
 - The user may request all versions of a secret, which will return a map of version to secret value
-- A cluster member requests all the parts for the requested secret (UDP multicast?)
-- The cluster member then rebuilds the secret and returns it to the user
+- Receiving node requests k - 1 shards from nodes, and gets one from itself (minimum threshold to reconstruct)
+- Node reconstructs the plaintext secret in memory using Shamir's algorithm (requires k of n shards)
+- **Plaintext exists only in memory during reconstruction, never written to disk**
+- Node returns the secret value to the client and clears it from memory
 
 ```mermaid
 sequenceDiagram
@@ -72,9 +80,10 @@ sequenceDiagram
 
     User->>Gateway: GET /secret/{key}?version={v}
     Gateway->>Node: Forward request
-    Node->>Cluster: Multicast: Request parts
-    Cluster-->>Node: Return parts
-    Node->>Node: Reconstruct secret<br/>using Shamir's algorithm
+    Node->>Node: Load local shard from disk
+    Node->>Cluster: Request k-1 additional shards
+    Cluster-->>Node: Return shards (encrypted in transit)
+    Node->>Node: Reconstruct plaintext in memory<br/>using Shamir's algorithm (k of n shards)
     Node-->>Gateway: Return secret value
     Gateway-->>User: Secret value
 ```
@@ -86,6 +95,8 @@ sequenceDiagram
 - Each time a secret is updated (or stored), the cluster returns the secret version
 - Version is determined using a cluster-wide clock system (Lamport?)
 - A user can request either a specific version of the secret or the latest
+- Update creates a new set of shards for the new version (independent from previous version shards)
+- **Each version is independently sharded; old shards remain for version history**
 
 ```mermaid
 sequenceDiagram
@@ -99,8 +110,10 @@ sequenceDiagram
     Gateway->>Node1: Forward update request
     Node1->>Clock: Request next version
     Clock-->>Node1: New version number
-    Node1->>Node1: Apply Shamir's Secret Sharing
-    Node1->>Nodes: Distribute secret parts<br/>with new version
+    Node1->>Node1: Split new secret value into n shards (in memory)<br/>Plaintext never written to disk
+    Node1->>Nodes: Distribute n-1 shards with new version
+    Node1->>Node1: Store local shard to disk
+    Nodes->>Nodes: Store received shards to disk
     Nodes-->>Node1: ACK
     Node1-->>Gateway: Success + New Version
     Gateway-->>User: Secret updated (version: N+1)
@@ -108,10 +121,38 @@ sequenceDiagram
 
 ---
 
-6. Cluster node stores its parts in a map
+6. A user deletes a stored secret
 
-- Each node stores its part of the secret in a KV store
-- Each node maps the user:key:version to the part of the secret
+- Client sends a delete request for a secret key to any cluster node
+- Receiving node broadcasts delete to nodes storing shards for that key
+- Deletion is considered successful once at least `m-k+1` delete acknowledgments are confirmed
+- This guarantees fewer than `k` persisted shards can remain, so reconstruction is no longer possible
+- The client receives success only after the threshold is met
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gateway
+    participant Node as Cluster Node
+    participant Cluster as Other Nodes
+
+    User->>Gateway: DELETE /secret {key}
+    Gateway->>Node: Forward delete request
+    Node->>Cluster: Broadcast delete for key shards
+    Cluster-->>Node: Delete ACKs
+    Node->>Node: Verify ACK count >= m-k+1
+    Node-->>Gateway: Success (non-reconstructable)
+    Gateway-->>User: Secret deleted
+```
+
+---
+
+7. Cluster node stores its parts in a map
+
+- Each node maps user:key:version to its assigned shard
+- No node has enough information to reconstruct a secret alone
+- Requires k nodes to collaborate for secret reconstruction
+- **No master key is used; security comes from shard distribution**
 
 ```mermaid
 graph LR
@@ -143,7 +184,7 @@ graph LR
 
 ---
 
-7. Node failure detection
+8. Node failure detection
 
 - Use logging with heartbeats and gossip to determine node status
 
@@ -173,6 +214,6 @@ sequenceDiagram
 
 ---
 
-8. Node failure recovery
+9. Node failure recovery
 
 - TODO: finalize the approach

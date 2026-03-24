@@ -7,21 +7,21 @@ https://docs.google.com/document/d/1nvzYSdccBbdk0uiQnFu74rlTIZ1Uh9fU-n-h0eZdvn0/
 
 ## Project Overview
 
-In this project, you will design and implement a distributed secrets vault that stores opaque secret values durably and serves them to authorized callers across multiple nodes.
+A distributed secrets vault that stores secret values durably across a leaderless cluster and serves them to authorized callers. Secrets are protected through **Shamir's Secret Sharing** rather than traditional encryption.
 
-The system exposes a simple HTTP API for creating, updating, and retrieving secrets. Creating a secret establishes its existence and stores its initial value. Updating a secret creates a new version of an existing secret while preserving historical values. These operations are state-creating actions whose correctness depends on durable, replicated storage.
+The system exposes a simple HTTP API for creating, updating, and retrieving secrets. Each secret is split into n shards (in memory), with 1 shard stored locally and n-1 distributed to other nodes. Reconstruction requires k shards from k different nodes. Updating a secret creates new, independent shards for each version.
 
-Multiple nodes cooperate to store secret state, serve requests concurrently, and remain correct under failure and restart. The system may use centralized coordination internally, but must behave correctly as a distributed system.
+Multiple nodes in the cluster coordinate through heartbeats and gossip protocols without a central leader. The system handles concurrent requests safely and remains correct under node failures and restarts.
 
-Secrets are stored encrypted at rest using envelope encryption. Secret values are treated as opaque bytes by the system outside of encryption and history management. The project does not include key rotation or key lifecycle management beyond using a fixed master key configuration.
+Secrets are protected using **Shamir's Secret Sharing**: each secret is split into n shards distributed across cluster nodes. No single node can reconstruct a secret; k nodes must cooperate. Plaintext is never stored on disk or transmitted between nodes.
 
-The emphasis of the project is on distributed systems behavior: clear authority over secret existence, durable recording, replication, consistent reads under partial failure, concurrency safety, and explainable recovery. System behavior must be observable through logs and state inspection.
+Multiple nodes in a **leaderless cluster** coordinate through heartbeats and gossip protocols without a central leader.
 
-You are not expected to implement production hardening, external secret manager integrations, or key rotation. The focus is on correctness and explainable behavior.
+The emphasis of the project is on distributed systems behavior: clear authority over secret existence, durable recording, shard replication, consistent reads under partial failure, concurrency safety, and explainable recovery. System behavior must be observable through logs and state inspection.
 
 ---
 
-### 1. [Components](components.md)
+### 1. [Components and Scope](scope.md)
 
 ### 2. [Deliverables & Milestones](milestones.md)
 
@@ -43,9 +43,9 @@ When the system is running correctly:
   - process `enc(NAME)` references by storing the referenced value as a **new** secret and returning `secret(NAME)`
 - If any `enc(NAME)` refers to a secret that already exists, the entire request fails
 - Secrets are considered valid only after they are durably recorded
-- Secret state is replicated across vault nodes
-- Secret values are never stored in plaintext at rest
-- Each stored secret is encrypted with a per-secret data key that is wrapped by a configured master key
+- Secret state is replicated across vault nodes as shards
+- Plaintext secret values never exist on disk or between nodes—only Shamir shards are stored
+- Each secret is split into n shards; k shards are needed to reconstruct (no master key required)
 - Concurrent requests do not create conflicting or duplicate secret records
 - Retrieval enforces access boundaries and isolation rules
 - Requests for secrets not valid for the caller return _not found_
@@ -60,23 +60,23 @@ When the system is running correctly:
 
 You are expected to design, implement, and explain how your system handles:
 
-- Agreement on secret existence across nodes
-- Durable recording of secret creation and updates
+- Shard creation and distribution: splitting secrets into n shards in memory, securely distributing n-1 shards to peers, storing 1 shard locally
+- Quorum-based reconstruction: collecting k shards from k nodes and reconstructing secrets in memory only
 - Distinguishing create and update operations under concurrency
-- Versioned updates to existing secrets
+- Versioned updates using cluster-wide logical timestamps (Lamport clock)
 - Tracking and serving historical secret versions
-- Defining validity intervals for secret values
-- Replication of authoritative state
-- Correct handling of retries
+- Defining validity intervals for secret values  
+- Replication of authoritative state across all nodes
+- Correct handling of retries and idempotency
 - Isolation between different callers or tenants
 - Coordinated creation and retrieval of multiple secrets in a single operation
 - Deterministic failure when duplicate or missing secrets are encountered
 - Deterministic transformation of `.env` files
-- Node crashes during read or write operations
+- Node failures during read or write operations
 - Restart and recovery without manual intervention
-- Convergence after partial failure
+- Quorum availability: remaining operational while maintaining security with at least k healthy nodes
 - Making behavior observable and explainable
-- Encrypting stored state without changing authority boundaries or introducing non-authoritative caches
+- Heartbeat and gossip protocols for failure detection and node state dissemination
 
 ---
 
