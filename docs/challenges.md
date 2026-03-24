@@ -273,7 +273,7 @@ sequenceDiagram
     Node->>Cluster: Gossip HELLO with current node ID and address
     Cluster-->>Node: Gossip replies with cluster membership and missed metadata deltas
     Node->>Node: Apply metadata deltas (versions, validity intervals committed while offline)
-    Node->>Node: Mark self as healthy; begin accepting requests
+    Node->>Node: Mark self as healthy, begin accepting requests
 ```
 
 ### Durability guarantees
