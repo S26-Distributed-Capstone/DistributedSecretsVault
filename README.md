@@ -9,7 +9,7 @@ The Distributed Secrets Vault is a leaderless cluster system where secrets are s
 ## Project Plan
 
 - [Scope (scenarios covered)](docs/scope.md)
-- [Distributed System Challenges](https://github.com/S26-Distributed-Capstone/General-4020/blob/main/template/challenges.md)
+- [Distributed System Challenges](docs/challenges.md)
 - [Workflow Diagrams](docs/crud)
 - [Software Architecture Diagrams](docs/architecture.md)
 - [Tools & Technologies](https://github.com/S26-Distributed-Capstone/General-4020/blob/main/template/technologies.md)
