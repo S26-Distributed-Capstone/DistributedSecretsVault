@@ -24,6 +24,7 @@ A client can delete a secret by sending a DELETE request specifying the secret k
 - The gateway forwards the request to the cluster; the receiving node broadcasts the delete to all n nodes.
 - Each node checks its local storage for a shard matching the key, deletes it, and returns an acknowledgment.
 - After m − k + 1 acknowledgments are received (or the timeout is reached with that threshold met), the deletion is confirmed and the client receives a 204 No Content response.
+- **Response**: `204 No Content`
 
 ```mermaid
 sequenceDiagram
@@ -71,6 +72,7 @@ sequenceDiagram
 - The specified key does not correspond to any existing secret in the cluster.
 - No node returns a shard for that key; the deletion threshold cannot be met.
 - The client receives: "Secret not found".
+- **Response**: `404 Not Found`
 
 ---
 
@@ -79,6 +81,7 @@ sequenceDiagram
 - The client's credentials are missing, expired, or invalid.
 - The request is rejected before reaching the cluster.
 - The client receives: "Unauthorized".
+- **Response**: `401 Unauthorized`
 
 ---
 
@@ -87,3 +90,4 @@ sequenceDiagram
 - The request is malformed, for example the key field is missing or empty.
 - The controller rejects the request during validation before forwarding it.
 - The client receives: "Bad request".
+- **Response**: `400 Bad Request`

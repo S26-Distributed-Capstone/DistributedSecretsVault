@@ -42,6 +42,7 @@ In every case the receiving node collects at least k shards (the reconstruction 
 - Node requests k-1 additional shards from peer nodes
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (k of n shards)
 - Secret value is returned to the client; plaintext is cleared from memory immediately
+- **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
@@ -74,6 +75,7 @@ sequenceDiagram
 - Node requests k-1 additional shards from peer nodes for the same version
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (k of n shards)
 - Secret value for the requested version is returned to the client; plaintext is cleared from memory
+- **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
@@ -104,6 +106,7 @@ sequenceDiagram
 - Each version's plaintext is reconstructed independently in memory and added to the result map
 - Plaintext for each version is cleared from memory as soon as it is added to the map
 - Node returns the complete map of version → secret value to the client
+- **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
@@ -136,6 +139,7 @@ sequenceDiagram
     - If no node can confirm any version for the key, return `404 Not Found` with a stable error code.
     - Do not leak existence across tenants; errors should be scoped to the authenticated user.
     - Cache the negative lookup briefly to reduce repeated fan-out.
+- **Response**: `404 Not Found`
 
 ---
 
@@ -147,6 +151,7 @@ sequenceDiagram
     - If the version is missing in a majority of metadata sources, return `404 Not Found`.
     - Include the latest known version in the response body (not headers) when safe to help clients recover.
     - Avoid reconstruct attempts for unknown versions to reduce load.
+- **Response**: `404 Not Found`
 
 ---
 
@@ -158,6 +163,7 @@ sequenceDiagram
     - If k shards cannot be assembled, return `503 Service Unavailable` with a retryable error code.
     - Include a `Retry-After` hint based on recent cluster health.
     - Record a quorum health event for operator visibility.
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -169,6 +175,7 @@ sequenceDiagram
     - Return `401 Unauthorized` for invalid/expired credentials, `403 Forbidden` for valid but insufficient access.
     - Do not indicate whether the secret exists.
     - Audit log the denial with request metadata (no plaintext).
+- **Response**: `401 Unauthorized` or `403 Forbidden`
 
 ---
 
@@ -180,6 +187,7 @@ sequenceDiagram
     - Gateways should be stateless and horizontally scaled behind a load balancer.
     - Use health checks and circuit breakers to avoid routing to unhealthy gateways.
     - Return `503 Service Unavailable` when the gateway is overloaded.
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -191,6 +199,7 @@ sequenceDiagram
     - Node-to-node shard requests use timeouts and fall back to other peers.
     - If a receiving node cannot reach enough peers to reach k shards, treat as insufficient shards.
     - Track node health and quarantine flapping nodes temporarily.
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -202,6 +211,7 @@ sequenceDiagram
     - If the latest version cannot be resolved safely, return `503 Service Unavailable` with a retryable error code.
     - For explicit version requests, bypass the clock entirely.
     - Emit a health signal for clock availability.
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -213,6 +223,7 @@ sequenceDiagram
     - If still failing, fetch a replacement shard from a peer if redundancy allows.
     - If k shards can still be assembled, proceed; otherwise return `503 Service Unavailable`.
     - Mark the local shard as suspect and trigger background repair.
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -224,6 +235,7 @@ sequenceDiagram
     - If enumeration still fails, return `503 Service Unavailable` with a retryable error code.
     - Do not partially return results unless explicitly requested by the client.
     - Emit an error metric tagged by storage backend.
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -235,3 +247,4 @@ sequenceDiagram
     - Attempt to replace bad shards by querying additional peers.
     - If reconstruction still fails, return `500 Internal Server Error` for integrity failures or `503` if insufficient good shards.
     - Log and quarantine offending shards for investigation.
+- **Response**: `500 Internal Server Error` or `503 Service Unavailable`

@@ -27,6 +27,7 @@ A client can update a secret only if a secret with that key already exists. The 
 - The receiving node validates that the key already exists, obtains an assigned Lamport version and timestamp for the new version, and splits the updated secret into n shards.
 - The receiving node sends update shards to peers, and each node stores its shard in temporary in-memory state so conflicts can be resolved before durable writes.
 - The receiving node then submits a persistence request for the new version to all nodes and returns success after m persistence confirmations.
+- **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
@@ -63,6 +64,7 @@ sequenceDiagram
 - Nodes and peers use persisted state, temporary state, and Lamport ordering to resolve which version is accepted first.
 - The earlier update continues through quorum and persistence, while the later conflicting update is rejected or retried with a newer version.
 - The client receives success for the accepted update and an error for the rejected one.
+- **Response**: `200 OK` for the accepted update; `409 Conflict` for the rejected update
 
 ```mermaid
 sequenceDiagram
@@ -116,6 +118,7 @@ sequenceDiagram
 - The gateway attempts to forward an update request into the cluster so a node can pick it up.
 - If forwarding times out, the gateway retries with another node.
 - After repeated timeouts, the gateway returns: "Could not forward request to node".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -124,6 +127,7 @@ sequenceDiagram
 - The node requests the next Lamport version and timestamp before splitting and distributing shards.
 - If the clock does not return version metadata before timeout, update cannot continue.
 - The client receives: "Secret update error - clock error".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -132,6 +136,7 @@ sequenceDiagram
 - After update-shard distribution, the node must receive receive-phase confirmations from at least m nodes.
 - If quorum is not reached before timeout, the node retries and updates the confirmation count.
 - If quorum is still not reached, update fails with: "Secret update failed - not enough confirmations from nodes".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -140,6 +145,7 @@ sequenceDiagram
 - The operation reaches the persist phase but does not receive persistence confirmations from m nodes.
 - The node retries confirmation collection; if the threshold is still unmet, it issues cleanup deletes for partially persisted new-version shards.
 - The operation then fails with: "Secret update failed - not enough confirmations from nodes".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -148,3 +154,4 @@ sequenceDiagram
 - The secret update flow can complete on the cluster, but the client may not receive the final response.
 - After client-side timeout, the client retries the request.
 - Retries must be handled safely against already persisted versions or in-progress updates.
+- **Response**: `200 OK` (sent by server; not received by client due to timeout)
