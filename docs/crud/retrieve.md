@@ -33,9 +33,7 @@ In every case the receiving node collects at least k shards (the reconstruction 
 
 ---
 
-## Happy Paths
-
-### 1. Retrieve Latest Version
+## 1. Retrieve Latest Version
 
 - Client sends a GET request for a secret key without specifying a version
 - Gateway forwards the request to any cluster node (leaderless routing)
@@ -44,6 +42,7 @@ In every case the receiving node collects at least k shards (the reconstruction 
 - Node requests k-1 additional shards from peer nodes
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (k of n shards)
 - Secret value is returned to the client; plaintext is cleared from memory immediately
+- **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
@@ -67,7 +66,7 @@ sequenceDiagram
 
 ---
 
-### 2. Retrieve Specific Version
+## 2. Retrieve Specific Version
 
 - Client sends a GET request for a secret key with an explicit version number
 - Gateway forwards the request to any cluster node
@@ -76,6 +75,7 @@ sequenceDiagram
 - Node requests k-1 additional shards from peer nodes for the same version
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (k of n shards)
 - Secret value for the requested version is returned to the client; plaintext is cleared from memory
+- **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
@@ -97,7 +97,7 @@ sequenceDiagram
 
 ---
 
-### 3. Retrieve All Versions
+## 3. Retrieve All Versions
 
 - Client sends a GET request for a secret key requesting all versions
 - Gateway forwards the request to any cluster node
@@ -106,6 +106,7 @@ sequenceDiagram
 - Each version's plaintext is reconstructed independently in memory and added to the result map
 - Plaintext for each version is cleared from memory as soon as it is added to the map
 - Node returns the complete map of version → secret value to the client
+- **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
@@ -130,9 +131,7 @@ sequenceDiagram
 
 ---
 
-## Error Cases
-
-### 4. Secret Not Found
+## 4. Secret Not Found
 
 - **When it happens**: The key has no recorded versions for the authenticated user.
 - **Handling**:
@@ -140,10 +139,11 @@ sequenceDiagram
     - If no node can confirm any version for the key, return `404 Not Found` with a stable error code.
     - Do not leak existence across tenants; errors should be scoped to the authenticated user.
     - Cache the negative lookup briefly to reduce repeated fan-out.
+- **Response**: `404 Not Found`
 
 ---
 
-### 5. Version Not Found
+## 5. Version Not Found
 
 - **When it happens**: The key exists, but the requested version does not.
 - **Handling**:
@@ -151,10 +151,11 @@ sequenceDiagram
     - If the version is missing in a majority of metadata sources, return `404 Not Found`.
     - Include the latest known version in the response body (not headers) when safe to help clients recover.
     - Avoid reconstruct attempts for unknown versions to reduce load.
+- **Response**: `404 Not Found`
 
 ---
 
-### 6. Insufficient Shards
+## 6. Insufficient Shards
 
 - **When it happens**: Fewer than k shards are available due to node loss, partition, or read failures.
 - **Handling**:
@@ -162,10 +163,11 @@ sequenceDiagram
     - If k shards cannot be assembled, return `503 Service Unavailable` with a retryable error code.
     - Include a `Retry-After` hint based on recent cluster health.
     - Record a quorum health event for operator visibility.
+- **Response**: `503 Service Unavailable`
 
 ---
 
-### 7. Not Authorized to Access Secret
+## 7. Not Authorized to Access Secret
 
 - **When it happens**: Authentication fails or authorization rules deny access.
 - **Handling**:
@@ -173,10 +175,11 @@ sequenceDiagram
     - Return `401 Unauthorized` for invalid/expired credentials, `403 Forbidden` for valid but insufficient access.
     - Do not indicate whether the secret exists.
     - Audit log the denial with request metadata (no plaintext).
+- **Response**: `401 Unauthorized` or `403 Forbidden`
 
 ---
 
-### 8. Gateway Unavailable
+## 8. Gateway Unavailable
 
 - **When it happens**: The gateway is unreachable or returns errors to the client.
 - **Handling**:
@@ -184,10 +187,11 @@ sequenceDiagram
     - Gateways should be stateless and horizontally scaled behind a load balancer.
     - Use health checks and circuit breakers to avoid routing to unhealthy gateways.
     - Return `503 Service Unavailable` when the gateway is overloaded.
+- **Response**: `503 Service Unavailable`
 
 ---
 
-### 9. Node Unavailable
+## 9. Node Unavailable
 
 - **When it happens**: The target node is down or unreachable.
 - **Handling**:
@@ -195,10 +199,11 @@ sequenceDiagram
     - Node-to-node shard requests use timeouts and fall back to other peers.
     - If a receiving node cannot reach enough peers to reach k shards, treat as insufficient shards.
     - Track node health and quarantine flapping nodes temporarily.
+- **Response**: `503 Service Unavailable`
 
 ---
 
-### 10. Lamport Clock Unavailable
+## 10. Lamport Clock Unavailable
 
 - **When it happens**: The service used to resolve the latest version is unreachable or inconsistent.
 - **Handling**:
@@ -206,10 +211,11 @@ sequenceDiagram
     - If the latest version cannot be resolved safely, return `503 Service Unavailable` with a retryable error code.
     - For explicit version requests, bypass the clock entirely.
     - Emit a health signal for clock availability.
+- **Response**: `503 Service Unavailable`
 
 ---
 
-### 11. Local Shard Read Failure
+## 11. Local Shard Read Failure
 
 - **When it happens**: Local storage returns an error or corrupted shard data.
 - **Handling**:
@@ -217,10 +223,11 @@ sequenceDiagram
     - If still failing, fetch a replacement shard from a peer if redundancy allows.
     - If k shards can still be assembled, proceed; otherwise return `503 Service Unavailable`.
     - Mark the local shard as suspect and trigger background repair.
+- **Response**: `503 Service Unavailable`
 
 ---
 
-### 12. Version Enumeration Failure
+## 12. Version Enumeration Failure
 
 - **When it happens**: The node cannot list versions due to metadata or storage errors.
 - **Handling**:
@@ -228,10 +235,11 @@ sequenceDiagram
     - If enumeration still fails, return `503 Service Unavailable` with a retryable error code.
     - Do not partially return results unless explicitly requested by the client.
     - Emit an error metric tagged by storage backend.
+- **Response**: `503 Service Unavailable`
 
 ---
 
-### 13. Shard Reconstruction Failure
+## 13. Shard Reconstruction Failure
 
 - **When it happens**: Collected shards fail integrity checks or reconstruction cannot complete.
 - **Handling**:
@@ -239,3 +247,4 @@ sequenceDiagram
     - Attempt to replace bad shards by querying additional peers.
     - If reconstruction still fails, return `500 Internal Server Error` for integrity failures or `503` if insufficient good shards.
     - Log and quarantine offending shards for investigation.
+- **Response**: `500 Internal Server Error` or `503 Service Unavailable`

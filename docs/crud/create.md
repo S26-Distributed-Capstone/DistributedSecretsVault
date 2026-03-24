@@ -12,6 +12,7 @@ A client can create a secret only if no secret with the same key already exists.
 - [2. Create two secrets](#2-create-two-secrets)
 
 **Error Cases**
+
 - [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
 - [4. Key is already persisted on the receiving node](#4-key-is-already-persisted-on-the-receiving-node)
 - [5. Key is already persisted on another node](#5-key-is-already-persisted-on-another-node)
@@ -19,6 +20,7 @@ A client can create a secret only if no secret with the same key already exists.
 - [7. M nodes do not send back confirmation for receiving secret](#7-m-nodes-do-not-send-back-confirmation-for-receiving-secret)
 - [8. M nodes do not send back confirmation for persisting secret](#8-m-nodes-do-not-send-back-confirmation-for-persisting-secret)
 - [9. Client does not receive response](#9-client-does-not-receive-response)
+
 ---
 
 ## 1. Create one secret
@@ -27,6 +29,7 @@ A client can create a secret only if no secret with the same key already exists.
 - The receiving node validates that the key does not already exist, obtains an assigned Lamport version and timestamp, and splits the secret into n shards.
 - The receiving node sends shards to peers, and each node stores its shard in temporary in-memory state so conflicts can be resolved before durable writes.
 - The receiving node then submits a persistence request to all nodes and returns success after m persistence confirmations.
+- **Response**: `201 Created`
 
 ```mermaid
 sequenceDiagram
@@ -64,6 +67,7 @@ sequenceDiagram
 - Nodes and peers use persisted state, temporary state, and Lamport ordering to resolve the conflict.
 - The earlier request continues through quorum and persistence, while the later request is rejected.
 - The client receives success for the earlier request and an error for the later one.
+- **Response**: `201 Created` for the earlier request; `409 Conflict` for the later request
 
 ```mermaid
 sequenceDiagram
@@ -119,6 +123,7 @@ sequenceDiagram
 - The gateway attempts to forward a create request to a cluster node.
 - If forwarding times out, the gateway retries with another node.
 - After repeated timeouts, the gateway returns: "Could not forward request to node".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -127,6 +132,7 @@ sequenceDiagram
 - The receiving node checks local persisted data before starting shard distribution.
 - If the key already exists locally, creation is rejected immediately.
 - The client receives: "Secret creation failed - key already exists".
+- **Response**: `409 Conflict`
 
 ---
 
@@ -135,6 +141,7 @@ sequenceDiagram
 - The request may pass the initial local check but fail during peer validation.
 - If any peer already has the key persisted, it returns a failure and the create operation is aborted.
 - The client receives: "Secret creation failed - key already exists", and temporary shards are cleaned up.
+- **Response**: `409 Conflict`
 
 ---
 
@@ -143,6 +150,7 @@ sequenceDiagram
 - The node requests a Lamport version before splitting and distributing shards.
 - If the clock does not return a version before timeout, creation cannot continue.
 - The client receives: "Secret creation error - clock error".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -151,6 +159,7 @@ sequenceDiagram
 - After shard distribution, the node must receive receive-phase confirmations from at least m nodes.
 - If quorum is not reached before timeout, the node retries and updates the confirmation count.
 - If quorum is still not reached, creation fails with: "Secret creation failed - not enough confirmations from nodes".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -159,6 +168,7 @@ sequenceDiagram
 - The operation reaches the persist phase but does not receive persistence confirmations from m nodes.
 - The node retries confirmation collection; if the threshold is still unmet, it issues cleanup deletes for partially persisted shards.
 - The operation then fails with: "Secret creation failed - not enough confirmations from nodes".
+- **Response**: `503 Service Unavailable`
 
 ---
 
@@ -167,3 +177,4 @@ sequenceDiagram
 - The secret creation flow can complete on the cluster, but the client may not receive the final response.
 - After client-side timeout, the client retries the request.
 - Retries must be handled safely against already persisted or in-progress state.
+- **Response**: `201 Created` (sent by server; not received by client due to timeout)
