@@ -33,9 +33,7 @@ In every case the receiving node collects at least k shards (the reconstruction 
 
 ---
 
-## Happy Paths
-
-### 1. Retrieve Latest Version
+## 1. Retrieve Latest Version
 
 - Client sends a GET request for a secret key without specifying a version
 - Gateway forwards the request to any cluster node (leaderless routing)
@@ -67,7 +65,7 @@ sequenceDiagram
 
 ---
 
-### 2. Retrieve Specific Version
+## 2. Retrieve Specific Version
 
 - Client sends a GET request for a secret key with an explicit version number
 - Gateway forwards the request to any cluster node
@@ -97,7 +95,7 @@ sequenceDiagram
 
 ---
 
-### 3. Retrieve All Versions
+## 3. Retrieve All Versions
 
 - Client sends a GET request for a secret key requesting all versions
 - Gateway forwards the request to any cluster node
@@ -130,9 +128,7 @@ sequenceDiagram
 
 ---
 
-## Error Cases
-
-### 4. Secret Not Found
+## 4. Secret Not Found
 
 - **When it happens**: The key has no recorded versions for the authenticated user.
 - **Handling**:
@@ -143,7 +139,7 @@ sequenceDiagram
 
 ---
 
-### 5. Version Not Found
+## 5. Version Not Found
 
 - **When it happens**: The key exists, but the requested version does not.
 - **Handling**:
@@ -154,7 +150,7 @@ sequenceDiagram
 
 ---
 
-### 6. Insufficient Shards
+## 6. Insufficient Shards
 
 - **When it happens**: Fewer than k shards are available due to node loss, partition, or read failures.
 - **Handling**:
@@ -165,7 +161,7 @@ sequenceDiagram
 
 ---
 
-### 7. Not Authorized to Access Secret
+## 7. Not Authorized to Access Secret
 
 - **When it happens**: Authentication fails or authorization rules deny access.
 - **Handling**:
@@ -176,7 +172,7 @@ sequenceDiagram
 
 ---
 
-### 8. Gateway Unavailable
+## 8. Gateway Unavailable
 
 - **When it happens**: The gateway is unreachable or returns errors to the client.
 - **Handling**:
@@ -187,7 +183,7 @@ sequenceDiagram
 
 ---
 
-### 9. Node Unavailable
+## 9. Node Unavailable
 
 - **When it happens**: The target node is down or unreachable.
 - **Handling**:
@@ -198,7 +194,7 @@ sequenceDiagram
 
 ---
 
-### 10. Lamport Clock Unavailable
+## 10. Lamport Clock Unavailable
 
 - **When it happens**: The service used to resolve the latest version is unreachable or inconsistent.
 - **Handling**:
@@ -209,7 +205,7 @@ sequenceDiagram
 
 ---
 
-### 11. Local Shard Read Failure
+## 11. Local Shard Read Failure
 
 - **When it happens**: Local storage returns an error or corrupted shard data.
 - **Handling**:
@@ -220,7 +216,7 @@ sequenceDiagram
 
 ---
 
-### 12. Version Enumeration Failure
+## 12. Version Enumeration Failure
 
 - **When it happens**: The node cannot list versions due to metadata or storage errors.
 - **Handling**:
@@ -231,7 +227,7 @@ sequenceDiagram
 
 ---
 
-### 13. Shard Reconstruction Failure
+## 13. Shard Reconstruction Failure
 
 - **When it happens**: Collected shards fail integrity checks or reconstruction cannot complete.
 - **Handling**:

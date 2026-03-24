@@ -12,11 +12,13 @@ A client can update a secret only if a secret with that key already exists. The 
 - [2. Concurrent updates to the same secret](#2-concurrent-updates-to-the-same-secret)
 
 **Error Cases**
+
 - [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
 - [4. Clock does not return version](#4-clock-does-not-return-version)
 - [5. M nodes do not send back confirmation for receiving update](#5-m-nodes-do-not-send-back-confirmation-for-receiving-update)
 - [6. M nodes do not send back confirmation for persisting update](#6-m-nodes-do-not-send-back-confirmation-for-persisting-update)
 - [7. Client does not receive response](#7-client-does-not-receive-response)
+
 ---
 
 ## 1. Update one secret

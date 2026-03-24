@@ -1,32 +1,29 @@
-# Deleting a Secret
+# Delete Secret
 
-In the Distributed Secrets Vault application, a client can delete a secret by sending an HTTP DELETE request to the endpoint `?`. The request must contain a `deleteName` field specifying the name of the secret to be deleted.
+A client can delete a secret by sending a DELETE request specifying the secret key. The delete request is broadcast to all n nodes and is considered successful once at least m − k + 1 delete acknowledgments are received (ensuring fewer than k shards remain and the secret can no longer be reconstructed).
 
 ---
 
 ## Table of Contents
-- [Happy Path](#happy-path)
-- [Error Cases](#error-cases)
+
+**Happy Path**
+
+- [1. Delete one secret](#1-delete-one-secret)
+
+**Error Cases**
+
+- [2. Secret not found](#2-secret-not-found)
+- [3. Authentication failure](#3-authentication-failure)
+- [4. Invalid request](#4-invalid-request)
 
 ---
 
-## Happy-Path
+## 1. Delete one secret
 
-**Steps for the client:**
-1. Authenticate with the system.
-2. Construct the request body.
-3. Send the DELETE request to `?`.
-4. On success, the server responds with HTTP status 204 (No Content), indicating the secret has been deleted without returning any body.
-
-**Steps for the server:**
-1. The `SecretController` receives the DELETE request and extracts the `DeleteSecretRequest` from the request body.
-2. It validates the request and passes it to the `DeleteSecretService`.
-3. The `DeleteSecretService` broadcasts the delete request to all nodes in the cluster.
-4. Each node checks its local storage for a shard for the secret with the name `deleteName` and deletes it, responding with an acknowledgment of the deletion.
-5. The `DeleteSecretService` collects responses from all nodes, ideally receiving an ACK from each one. If `timeout` seconds have passed and at least `m - k + 1` delete ACKs are confirmed (the m-k deletion threshold), the service considers the deletion successful because fewer than `k` of the originally persisted `m` shards can remain.
-6. If the deletion is successful, the service returns a 204 No Content response to the client. If the secret is not found or the number of delete ACKs is below the `m - k + 1` threshold, the service returns an appropriate error response.
-
-### Sequence Diagram: Happy-Path Delete Flow
+- The client sends a DELETE request to the gateway specifying the secret key.
+- The gateway forwards the request to the cluster; the receiving node broadcasts the delete to all n nodes.
+- Each node checks its local storage for a shard matching the key, deletes it, and returns an acknowledgment.
+- After m − k + 1 acknowledgments are received (or the timeout is reached with that threshold met), the deletion is confirmed and the client receives a 204 No Content response.
 
 ```mermaid
 sequenceDiagram
@@ -37,45 +34,56 @@ sequenceDiagram
     participant Node2 as Cluster Node 2
     participant NodeN as Cluster Node N
 
-    Client->>Controller: DELETE /secret/{"mySecret"}
+    Client->>Controller: DELETE /secret/{key}
     activate Controller
     Controller->>Controller: Validate DeleteSecretRequest
-    Controller->>Service: invoke delete(deleteName)
+    Controller->>Service: invoke delete(key)
     activate Service
     Service->>Node1: Broadcast delete shard request
     Service->>Node2: Broadcast delete shard request
     Service->>NodeN: Broadcast delete shard request
-    
+
     activate Node1
-    Node1->>Node1: Find shard for "mySecret"
-    Node1->>Service: Return shard + success response
+    Node1->>Node1: Find shard for key
+    Node1->>Service: Return success acknowledgment
     deactivate Node1
-    
+
     activate Node2
-    Node2->>Node2: Find shard for "mySecret"
-    Node2->>Service: Return shard + success response
+    Node2->>Node2: Find shard for key
+    Node2->>Service: Return success acknowledgment
     deactivate Node2
-    
+
     activate NodeN
-    NodeN->>NodeN: Find shard for "mySecret"
-    NodeN->>Service: Return shard + success response
+    NodeN->>NodeN: Find shard for key
+    NodeN->>Service: Return success acknowledgment
     deactivate NodeN
-    
-    Service->>Service: Collect responses
-    Service->>Node1: Confirm deletion of shard
-    Service->>Node2: Confirm deletion of shard
-    Service->>NodeN: Confirm deletion of shard
-    
+
+    Service->>Service: Collect acknowledgments (threshold: m − k + 1)
     deactivate Service
-    Controller->>Client: 204 No Content
+    Controller-->>Client: 204 No Content
     deactivate Controller
 ```
 
-## Error Cases
+---
 
-Several issues can occur during the delete operation, leading to failures or unexpected behavior:
-- **Secret Not Found (404)**: If the `deleteName` does not correspond to an existing secret, a `SecretNotFoundException` is thrown, resulting in a 404 response with an error message like "Secret not found". This prevents deletion of non-existent secrets.
+## 2. Secret not found
 
-- **Authentication Failure (401)**: If the client lacks proper authentication, an `AuthenticationFailedException` is raised, returning a 401 Unauthorized status.
+- The specified key does not correspond to any existing secret in the cluster.
+- No node returns a shard for that key; the deletion threshold cannot be met.
+- The client receives: "Secret not found".
 
-- **Invalid Request (400)**: If the request body is malformed (e.g., missing `deleteName`), Spring Boot's validation may return a 400 Bad Request.
+---
+
+## 3. Authentication failure
+
+- The client's credentials are missing, expired, or invalid.
+- The request is rejected before reaching the cluster.
+- The client receives: "Unauthorized".
+
+---
+
+## 4. Invalid request
+
+- The request is malformed, for example the key field is missing or empty.
+- The controller rejects the request during validation before forwarding it.
+- The client receives: "Bad request".

@@ -12,6 +12,7 @@ A client can create a secret only if no secret with the same key already exists.
 - [2. Create two secrets](#2-create-two-secrets)
 
 **Error Cases**
+
 - [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
 - [4. Key is already persisted on the receiving node](#4-key-is-already-persisted-on-the-receiving-node)
 - [5. Key is already persisted on another node](#5-key-is-already-persisted-on-another-node)
@@ -19,6 +20,7 @@ A client can create a secret only if no secret with the same key already exists.
 - [7. M nodes do not send back confirmation for receiving secret](#7-m-nodes-do-not-send-back-confirmation-for-receiving-secret)
 - [8. M nodes do not send back confirmation for persisting secret](#8-m-nodes-do-not-send-back-confirmation-for-persisting-secret)
 - [9. Client does not receive response](#9-client-does-not-receive-response)
+
 ---
 
 ## 1. Create one secret
