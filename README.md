@@ -1,6 +1,6 @@
 # Distributed Secrets Vault
 
-**Team Members:** Noam Ben Simon, Max Franklin, Ari Krakauer, Jesse Langer
+**Team Members:** [Noam Ben Simon](https://github.com/NoamBenS), [Max Franklin](https://github.com/MaxFdev), [Ari Krakauer](https://github.com/akrakauer), [Jesse Langer](https://github.com/jesselanger2)
 
 ## Overview
 
