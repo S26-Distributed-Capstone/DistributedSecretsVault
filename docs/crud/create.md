@@ -16,7 +16,7 @@ A client can create a secret only if no secret with the same key already exists.
 - [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
 - [4. Key is already persisted on the receiving node](#4-key-is-already-persisted-on-the-receiving-node)
 - [5. Key is already persisted on another node](#5-key-is-already-persisted-on-another-node)
-- [6. Clock does not return version](#6-clock-does-not-return-version)
+- [6. Gateway metadata missing or invalid](#6-gateway-metadata-missing-or-invalid)
 - [7. M nodes do not send back confirmation for receiving secret](#7-m-nodes-do-not-send-back-confirmation-for-receiving-secret)
 - [8. M nodes do not send back confirmation for persisting secret](#8-m-nodes-do-not-send-back-confirmation-for-persisting-secret)
 - [9. Client does not receive response](#9-client-does-not-receive-response)
@@ -27,8 +27,9 @@ A client can create a secret only if no secret with the same key already exists.
 ## 1. Create one secret
 
 - A client submits a secret through the gateway, and the gateway forwards the request into the cluster where one node picks it up.
-- The receiving node validates that the key does not already exist, obtains an assigned Lamport version and timestamp, and splits the secret into n shards.
-- The receiving node sends shards to peers, and each node stores its shard in temporary in-memory state so conflicts can be resolved before durable writes.
+- The receiving node validates that the key does not already exist, then starts two-phase commit for `user:key`.
+- In the **voting phase**, nodes vote on write-lock ownership for the key and block competing writes until lock release.
+- In the **writing phase**, the lock owner splits the secret into n shards, sends shards to peers, and each node stages its shard in temporary in-memory state.
 - The receiving node then submits a persistence request to all nodes and returns success after m persistence confirmations.
 - **Response**: `201 Created`
 
@@ -38,15 +39,14 @@ sequenceDiagram
     participant Gateway
     participant Node as Cluster Node
     participant Peers as Other Nodes
-    participant Clock as Lamport Clock
-
     User->>Gateway: POST /secret {key,value}
-    Gateway->>Node: Forward request into cluster, one node accepts
+    Gateway->>Gateway: Attach request timestamp metadata
+    Gateway->>Node: Forward request + timestamp metadata
     Node->>Node: Check whether key is already persisted locally
-    Node->>Clock: Request Lamport version assignment and timestamp
-    Clock-->>Node: Return assigned version and timestamp
+    Node->>Peers: Voting phase: request write lock for user:key
+    Peers-->>Node: Vote confirmations
     Node->>Node: Split secret into n shards using Shamir's algorithm
-    Node->>Peers: Send n-1 shards to other nodes
+    Node->>Peers: Writing phase: send n-1 shards to other nodes
     Peers->>Peers: Store shard temporarily and check key state
     Node->>Node: Add local confirmation
     Peers-->>Node: Return confirmation if key is not persisted
@@ -56,6 +56,7 @@ sequenceDiagram
     Peers->>Peers: Persist shards
     Peers-->>Node: Send persistence confirmation
     Node->>Node: Wait for persistence confirmations from m nodes
+    Node->>Peers: Release write lock
     Node-->>Gateway: Return success confirmation
     Gateway-->>User: "Secret Created"
 ```
@@ -65,7 +66,7 @@ sequenceDiagram
 ## 2. Create two secrets
 
 - Two create requests with the same key may be processed concurrently by different nodes.
-- Nodes and peers use persisted state, temporary state, and Lamport ordering to resolve the conflict.
+- Nodes and peers use persisted state, temporary state, and voting-phase lock ownership to resolve the conflict.
 - The earlier request continues through quorum and persistence, while the later request is rejected.
 - The client receives success for the earlier request and an error for the later one.
 - **Response**: `201 Created` for the earlier request; `409 Conflict` for the later request
@@ -76,16 +77,15 @@ sequenceDiagram
     participant Gateway
     participant Node as Cluster Node
     participant Peers as Other Nodes
-    participant Clock as Lamport Clock
-
     par Secret 1
       User->>Gateway: POST /secret {key,value}
-      Gateway->>Node: Forward request into cluster, one node accepts
+      Gateway->>Gateway: Attach request timestamp metadata
+      Gateway->>Node: Forward request + timestamp metadata
       Node->>Node: Check whether key is already persisted locally
-      Node->>Clock: Request Lamport version assignment and timestamp
-      Clock-->>Node: Return assigned version and timestamp
+      Node->>Peers: Voting phase: request write lock for user:key
+      Peers-->>Node: Lock vote success (arrived first)
       Node->>Node: Split secret into n shards using Shamir's algorithm
-      Node->>Peers: Send n-1 shards to other nodes
+      Node->>Peers: Writing phase: send n-1 shards to other nodes
       Peers->>Peers: Store shard temporarily and check key state.<br>Key is in temporary storage, and this request came first
       Node->>Node: Check temporary key state.<br>Key is in temporary storage, and this request came first
       Node->>Node: Add local confirmation
@@ -93,16 +93,11 @@ sequenceDiagram
       Node->>Node: Wait for confirmations from m nodes
     and Secret 2
       User->>Gateway: POST /secret {same key as secret 1, value (may differ)}
-      Gateway->>Node: Forward request into cluster, one node accepts
+      Gateway->>Gateway: Attach request timestamp metadata
+      Gateway->>Node: Forward request + timestamp metadata
       Node->>Node: Check whether key is already persisted locally
-      Node->>Clock: Request Lamport version assignment and timestamp
-      Clock-->>Node: Return assigned version and timestamp
-      Node->>Node: Split secret into n shards using Shamir's algorithm
-      Node->>Peers: Send n-1 shards to other nodes
-      Peers->>Peers: Store shard temporarily and check key state.<br>Key is in temporary storage, and this request came second
-      Peers-->>Node: Send failure if secret already exists
-      Node->>Node: Check temporary key state.<br>Key is in temporary storage, and this request came second
-      Node->>Node: Wait for confirmations from m nodes
+      Node->>Peers: Voting phase: request write lock for user:key
+      Peers-->>Node: Lock vote failure (request arrived second)
       Node-->>Gateway: Send error on failure response(s) or timeout
       break after error is sent to user
         Gateway-->>User: "Secret 2 failed to create"
@@ -113,6 +108,7 @@ sequenceDiagram
     Peers->>Peers: Persist shards
     Peers-->>Node: Send persistence confirmation
     Node->>Node: Wait for persistence confirmations from m nodes
+    Node->>Peers: Release write lock
     Node-->>Gateway: Return success confirmation
     Gateway-->>User: "Secret 1 Created"
 ```
@@ -146,11 +142,11 @@ sequenceDiagram
 
 ---
 
-## 6. Clock does not return version
+## 6. Gateway metadata missing or invalid
 
-- The node requests a Lamport version before splitting and distributing shards.
-- If the clock does not return a version before timeout, creation cannot continue.
-- The client receives: "Secret creation error - clock error".
+- The node requires gateway-attached timestamp metadata before starting write coordination.
+- If metadata is missing or invalid, creation cannot continue.
+- The client receives: "Secret creation error - invalid request metadata".
 - **Response**: `503 Service Unavailable`
 
 ---
@@ -185,7 +181,7 @@ sequenceDiagram
 ## 10. Stale shards exist from a previously deleted secret
 
 - A secret was previously deleted, but up to `k − 1` nodes may still hold old shards because only `m − k + 1` delete confirmations were required.
-- Each shard is stored with an epoch number for its key; the epoch is tracked in the cluster-wide Lamport-clock metadata and is incremented each time a delete is confirmed.
-- When a create request arrives for the same key, the receiving node fetches the current epoch from the clock and includes it in shard distribution messages to peers.
+- Each shard is stored with an epoch number for its key; the epoch is tracked in replicated key metadata and is incremented each time a delete is confirmed.
+- When a create request arrives for the same key, the receiving node uses the latest replicated epoch and includes it in shard distribution messages to peers.
 - Peers compare the request epoch against the epoch of any locally stored shard: a lower local epoch means the shard is stale and is discarded; an equal epoch means the key already exists and the create is rejected.
 - **Response**: `201 Created` (stale shards discarded and new secret persisted successfully)

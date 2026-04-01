@@ -9,7 +9,7 @@ This document describes how the Distributed Secrets Vault addresses each distrib
 - [1. Shard Creation and Distribution](#1-shard-creation-and-distribution)
 - [2. Quorum-Based Reconstruction](#2-quorum-based-reconstruction)
 - [3. Distinguishing Create and Update Operations Under Concurrency](#3-distinguishing-create-and-update-operations-under-concurrency)
-- [4. Versioned Updates Using Cluster-Wide Logical Timestamps](#4-versioned-updates-using-cluster-wide-logical-timestamps)
+- [4. Versioned Updates Using Gateway-Attached Time Metadata](#4-versioned-updates-using-gateway-attached-time-metadata)
 - [5. Tracking and Serving Historical Secret Versions](#5-tracking-and-serving-historical-secret-versions)
 - [6. Defining Validity Intervals for Secret Values](#6-defining-validity-intervals-for-secret-values)
 - [7. Replication of Authoritative State Across All Nodes](#7-replication-of-authoritative-state-across-all-nodes)
@@ -46,15 +46,18 @@ Secret retrieval requires collecting at least k shards from k distinct nodes. Th
 
 **Addressed in:** [docs/crud/create.md](crud/create.md) (sections 1 and 2), [docs/crud/update.md](crud/update.md) (sections 1 and 2)
 
-Create and update are separate operations with different pre-conditions. A create request is rejected if the key already exists; an update request is rejected if the key does not exist. Both flows use a two-phase protocol (distribute then persist) guarded by temporary in-memory state and Lamport clock ordering to resolve races between concurrent requests for the same key.
+Create and update are separate operations with different pre-conditions. A create request is rejected if the key already exists; an update request is rejected if the key does not exist. Both flows use the same two-phase commit write protocol:
+
+1. **Voting phase** — nodes vote on lock ownership for `user:key`; non-owner writes are blocked.
+2. **Writing phase** — the lock owner distributes and persists shards, then releases the lock.
 
 ---
 
-## 4. Versioned Updates Using Cluster-Wide Logical Timestamps
+## 4. Versioned Updates Using Gateway-Attached Time Metadata
 
 **Addressed in:** [architecture.md](architecture.md) (section 5), [docs/crud/update.md](crud/update.md), [docs/crud/retrieve.md](crud/retrieve.md)
 
-Every create and update obtains a monotonically increasing version number and wall-clock timestamp from the cluster-wide Lamport clock before splitting and distributing shards. Shards are keyed by `user:key:version`, so each version is stored independently and all historical versions remain available.
+Every create and update request includes gateway-attached time metadata before entering cluster coordination. The lock-owning node uses this metadata when committing version state so versions are monotonically ordered per key. Shards are keyed by `user:key:version`, so each version is stored independently and all historical versions remain available.
 
 ---
 
@@ -62,7 +65,7 @@ Every create and update obtains a monotonically increasing version number and wa
 
 **Addressed in:** [docs/crud/retrieve.md](crud/retrieve.md) (section 3), [docs/scope.md](scope.md)
 
-Each node stores one shard per version of every secret it holds. The retrieve endpoint supports three modes: latest version (version resolved from the Lamport clock), a specific version number, and all versions (returns a map of version → secret value). Each version's plaintext is reconstructed independently and cleared from memory immediately after reconstruction.
+Each node stores one shard per version of every secret it holds. The retrieve endpoint supports three modes: latest version (resolved from replicated key metadata), a specific version number, and all versions (returns a map of version → secret value). Each version's plaintext is reconstructed independently and cleared from memory immediately after reconstruction.
 
 ---
 
@@ -70,14 +73,14 @@ Each node stores one shard per version of every secret it holds. The retrieve en
 
 Every persisted shard record includes two timestamps that together define the interval during which that version was (or is) the authoritative value:
 
-- `valid_from` — the wall-clock timestamp assigned by the Lamport clock when the version was committed. It is set once and never changed.
+- `valid_from` — the gateway-attached timestamp associated with the commit when the version became authoritative. It is set once and never changed.
 - `valid_to` — the wall-clock timestamp at which this version was superseded or deleted. It is `null` for the current version and is backfilled when a newer version is committed or the secret is deleted.
 
 ### How `valid_to` is set
 
 When a new version V+1 is committed, the cluster sets `valid_to` on all shard records for version V to the `valid_from` of version V+1. When a secret is deleted, `valid_to` on all surviving shard records is set to the deletion timestamp.
 
-Because the Lamport clock provides a total order over all events, `valid_from` values are strictly increasing across versions of the same key, and validity intervals never overlap.
+Because writes are serialized per key by the two-phase lock protocol, `valid_from` values are strictly increasing across versions of the same key, and validity intervals never overlap.
 
 ```mermaid
 timeline
@@ -99,7 +102,7 @@ timeline
 | ------------ | --------- | ------------------------------------------------------------------ |
 | `user`       | string    | Authenticated caller identity                                      |
 | `key`        | string    | Secret name                                                        |
-| `version`    | integer   | Monotonically increasing Lamport version                           |
+| `version`    | integer   | Monotonically increasing version number                            |
 | `shard`      | bytes     | Encrypted shard bytes (never plaintext)                            |
 | `epoch`      | integer   | Delete-cycle counter; incremented on each confirmed delete         |
 | `valid_from` | timestamp | When this version became authoritative                             |
@@ -113,7 +116,7 @@ Authoritative state consists of two categories:
 
 1. **Shard data** — each node stores exactly the shards assigned to it. Shard data is replicated during the create/update two-phase protocol: every node that stores a shard for a given `user:key:version` independently persists that shard to its durable Redis store, confirmed via the m-node quorum before success is returned to the caller.
 
-2. **Metadata** — secret existence, version lists, validity intervals, epoch counters, and Lamport clock state do not live on a single node. They are disseminated using the gossip protocol so every node maintains a local, eventually-consistent copy. This lets any node answer existence and version-history queries without contacting a central registry.
+2. **Metadata** — secret existence, version lists, validity intervals, and epoch counters are replicated across nodes through commit acknowledgments and gossip so every node maintains a local, eventually-consistent copy. This lets any node answer existence and version-history queries without contacting a central registry.
 
 ### Metadata gossip replication
 
@@ -131,9 +134,9 @@ sequenceDiagram
     Note over Node1,Node3: All nodes converge on the same metadata
 ```
 
-### Lamport clock persistence
+### Metadata persistence
 
-The Lamport clock counter and the current epoch for each key are stored in PostgreSQL. The primary handles all clock writes. Standbys stream from the primary via synchronous WAL replication and are used for read-only fallback if the primary is temporarily unreachable (clock reads only; writes must wait for the primary). On node restart the clock state is reloaded from PostgreSQL and gossip catches up any metadata that arrived while the node was offline.
+Metadata is durably persisted with the shard write outcomes and propagated by gossip. PostgreSQL is used exclusively for user data management (accounts, authentication-related records) and is not a centralized clock coordinator.
 
 ---
 
@@ -141,7 +144,7 @@ The Lamport clock counter and the current epoch for each key are stored in Postg
 
 **Addressed in:** [docs/crud/create.md](crud/create.md) (section 9), [docs/crud/update.md](crud/update.md) (section 7)
 
-Each create and update request is idempotent with respect to the final persisted state. If a client retries after a timeout the receiving node detects that the version is already persisted and returns success without re-applying the operation. Duplicate creates are rejected with `409 Conflict`. Duplicate updates at the same Lamport version are treated as idempotent replays and return `200 OK` if the shard data matches the persisted record.
+Each create and update request is idempotent with respect to the final persisted state. If a client retries after a timeout the receiving node detects that the version is already persisted and returns success without re-applying the operation. Duplicate creates are rejected with `409 Conflict`. Duplicate updates at the same version are treated as idempotent replays and return `200 OK` if the shard data matches the persisted record.
 
 ---
 
@@ -160,7 +163,7 @@ Multi-secret operations are exposed through the `.env` workflow (see [challenge 
 - **Multi-secret creation** (`enc` directives): all new secrets are staged before any are committed. If any creation fails the entire operation is rolled back and no new secrets are persisted.
 - **Multi-secret retrieval** (`secret` directives): all secrets are resolved before the transformed file is returned. If any lookup fails the entire operation fails and no partial result is returned.
 
-The receiving node coordinates both phases using the same two-phase distribution and persistence protocol used for single-secret operations, extended to cover multiple keys in parallel. Each key is assigned a version independently by the Lamport clock, so there are no cross-key ordering guarantees within a single `.env` call — the only guarantee is that all keys are either fully committed or none are.
+The receiving node coordinates both phases using the same two-phase distribution and persistence protocol used for single-secret operations, extended to cover multiple keys in parallel. Each key is versioned independently using the gateway-attached timestamp metadata and per-key lock coordination, so there are no cross-key ordering guarantees within a single `.env` call — the only guarantee is that all keys are either fully committed or none are.
 
 ```mermaid
 sequenceDiagram
@@ -251,6 +254,11 @@ API_KEY=s3cr3tV@lue
 
 The system tolerates up to n-k node failures on reads (only k shards are needed) and up to n-m node failures on writes (m confirmations required, m ≥ k). HAProxy health checks remove failed nodes from rotation so new requests are not routed to them. Node-to-node shard requests use timeouts; if a peer does not respond within the timeout window the requesting node tries additional peers until k shards are collected or the budget is exhausted.
 
+Write failures are classified by phase:
+
+- **Failure in voting phase**: lock quorum is not reached; no write is committed.
+- **Failure in writing phase**: lock was granted but persistence quorum fails; partial writes are rolled back before lock release.
+
 ---
 
 ## 14. Restart and Recovery Without Manual Intervention
@@ -262,14 +270,11 @@ Each node recovers automatically on restart using durable storage and gossip wit
 ```mermaid
 sequenceDiagram
     participant Redis
-    participant Postgres
     participant Node
     participant Cluster as Other Nodes
 
     Node->>Redis: Load shard data from AOF log
     Redis-->>Node: All persisted shards restored
-    Node->>Postgres: Reload Lamport clock state and epoch counters
-    Postgres-->>Node: Clock and epoch state restored
     Node->>Cluster: Gossip HELLO with current node ID and address
     Cluster-->>Node: Gossip replies with cluster membership and missed metadata deltas
     Node->>Node: Apply metadata deltas (versions, validity intervals committed while offline)
@@ -281,7 +286,7 @@ sequenceDiagram
 | Storage layer                        | Persistence mechanism                              | Max data loss on failure   |
 | ------------------------------------ | -------------------------------------------------- | -------------------------- |
 | Redis (shards)                       | AOF with `everysec` fsync                          | At most 1 second           |
-| PostgreSQL (clock, accounts)         | Synchronous WAL on primary + 1 standby             | 0 (synchronous replication)|
+| PostgreSQL (user accounts only)      | Synchronous WAL on primary + 1 standby             | 0 (synchronous replication)|
 
 ### Stale shard handling on restart
 
@@ -343,7 +348,7 @@ Each log event includes:
 | `user`        | Authenticated caller identity (hashed if needed) |
 | `operation`   | `create`, `update`, `retrieve`, `delete`, `env`  |
 | `key`         | Secret name (never the secret value)             |
-| `version`     | Lamport version involved                         |
+| `version`     | Version involved                                 |
 | `node_id`     | The node emitting the event                      |
 | `outcome`     | `success`, `conflict`, `not_found`, `error`      |
 | `duration_ms` | Wall-clock time for the operation                |
@@ -355,7 +360,7 @@ Plaintext secret values are never included in logs.
 | Endpoint      | Description                                                              |
 | ------------- | ------------------------------------------------------------------------ |
 | `GET /health` | Node liveness; returns `200 OK` when the node is healthy                 |
-| `GET /status` | Node status: cluster membership, shard count, clock state, quorum health |
+| `GET /status` | Node status: cluster membership, shard count, lock/quorum health |
 
 ### Metrics
 

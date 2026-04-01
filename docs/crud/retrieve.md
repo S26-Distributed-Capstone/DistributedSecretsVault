@@ -26,7 +26,7 @@ In every case the receiving node collects at least k shards (the reconstruction 
 - [7. Not Authorized to Access Secret](#7-not-authorized-to-access-secret)
 - [8. Gateway Unavailable](#8-gateway-unavailable)
 - [9. Node Unavailable](#9-node-unavailable)
-- [10. Lamport Clock Unavailable](#10-lamport-clock-unavailable)
+- [10. Version Metadata Unavailable](#10-version-metadata-unavailable)
 - [11. Local Shard Read Failure](#11-local-shard-read-failure)
 - [12. Version Enumeration Failure](#12-version-enumeration-failure)
 - [13. Shard Reconstruction Failure](#13-shard-reconstruction-failure)
@@ -37,7 +37,7 @@ In every case the receiving node collects at least k shards (the reconstruction 
 
 - Client sends a GET request for a secret key without specifying a version
 - Gateway forwards the request to any cluster node (leaderless routing)
-- Receiving node consults the cluster-wide Lamport clock to resolve the current latest version number
+- Receiving node consults replicated key metadata to resolve the current latest version number
 - Node loads its own local shard for `user:key:latest-version` from durable storage
 - Node requests k-1 additional shards from peer nodes
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (k of n shards)
@@ -49,13 +49,11 @@ sequenceDiagram
     participant User
     participant Gateway
     participant Node as Cluster Node
-    participant Clock as Lamport Clock
     participant Peers as Other Nodes
 
     User->>Gateway: GET /secret/{key}
     Gateway->>Node: Forward request
-    Node->>Clock: Resolve latest version for {key}
-    Clock-->>Node: Latest version number
+    Node->>Node: Resolve latest version from replicated metadata for {key}
     Node->>Node: Load local shard for user:key:version from storage
     Node->>Peers: Request k-1 shards for user:key:version
     Peers-->>Node: Return shards (encrypted in transit)
@@ -203,14 +201,14 @@ sequenceDiagram
 
 ---
 
-## 10. Lamport Clock Unavailable
+## 10. Version Metadata Unavailable
 
-- **When it happens**: The service used to resolve the latest version is unreachable or inconsistent.
+- **When it happens**: Replicated key metadata used to resolve latest version is unavailable or inconsistent.
 - **Handling**:
     - For latest-version requests, attempt a quorum read of version metadata as a fallback.
     - If the latest version cannot be resolved safely, return `503 Service Unavailable` with a retryable error code.
-    - For explicit version requests, bypass the clock entirely.
-    - Emit a health signal for clock availability.
+    - For explicit version requests, bypass latest-version resolution entirely.
+    - Emit a health signal for metadata replication availability.
 - **Response**: `503 Service Unavailable`
 
 ---

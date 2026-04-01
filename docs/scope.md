@@ -42,6 +42,8 @@ It will:
 
 - Validate and persist proposed secret creations
 - Validate and persist secret updates as new versions
+- Use the same two-phase commit locking flow for create and update operations
+- Distinguish write failures by phase: voting phase vs writing phase
 - Validate and execute secret deletes using a threshold-based deletion rule
 - Maintain a clear distinction between secret existence and secret updates
 - Persist multiple versions of its parts of a secret
@@ -66,7 +68,9 @@ It defines:
 - How callers are identified and scoped
 - What it means for a secret to exist and be retrievable
 - The distinction between secret creation and secret update
+- The shared lock/commit flow used by both creation and update
 - How secret updates are versioned
+- How gateway-attached time metadata is carried into write commits
 - How historical secret values are retained
 - How secret deletion is defined and when a secret is considered non-reconstructable
 - What identifiers are used to reference secrets
