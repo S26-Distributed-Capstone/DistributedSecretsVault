@@ -14,7 +14,7 @@ A client can update a secret only if a secret with that key already exists. The 
 **Error Cases**
 
 - [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
-- [4. Clock does not return version](#4-clock-does-not-return-version)
+- [4. Gateway metadata missing or invalid](#4-gateway-metadata-missing-or-invalid)
 - [5. M nodes do not send back confirmation for receiving update](#5-m-nodes-do-not-send-back-confirmation-for-receiving-update)
 - [6. M nodes do not send back confirmation for persisting update](#6-m-nodes-do-not-send-back-confirmation-for-persisting-update)
 - [7. Client does not receive response](#7-client-does-not-receive-response)
@@ -24,8 +24,9 @@ A client can update a secret only if a secret with that key already exists. The 
 ## 1. Update one secret
 
 - A client submits an updated secret through the gateway, and the gateway forwards the request into the cluster where one node picks it up.
-- The receiving node validates that the key already exists, obtains an assigned Lamport version and timestamp for the new version, and splits the updated secret into n shards.
-- The receiving node sends update shards to peers, and each node stores its shard in temporary in-memory state so conflicts can be resolved before durable writes.
+- The receiving node validates that the key already exists, then starts two-phase commit for `user:key`.
+- In the **voting phase**, nodes vote on write-lock ownership for the key and block competing writes until lock release.
+- In the **writing phase**, the lock owner splits the updated secret into n shards and sends update shards to peers, where each node stages its shard in temporary in-memory state.
 - The receiving node then submits a persistence request for the new version to all nodes and returns success after m persistence confirmations.
 - **Response**: `200 OK`
 
@@ -35,14 +36,13 @@ sequenceDiagram
     participant Gateway
     participant Node as Cluster Node
     participant Peers as Other Nodes
-    participant Clock as Lamport Clock
-
     User->>Gateway: PUT /secret {key,newValue}
-    Gateway->>Node: Forward request into cluster, one node accepts
-    Node->>Clock: Request Lamport version assignment and timestamp
-    Clock-->>Node: Return assigned version and timestamp
+    Gateway->>Gateway: Attach request timestamp metadata
+    Gateway->>Node: Forward request + timestamp metadata
+    Node->>Peers: Voting phase: request write lock for user:key
+    Peers-->>Node: Vote confirmations
     Node->>Node: Split updated secret into n shards using Shamir's algorithm
-    Node->>Peers: Send update shards with key and version
+    Node->>Peers: Writing phase: send update shards with key and version
     Peers->>Peers: Store shard temporarily and check key/version state
     Node->>Node: Add local confirmation if key is persisted locally
     Peers-->>Node: Return confirmation if update is valid
@@ -52,6 +52,7 @@ sequenceDiagram
     Peers->>Peers: Persist versioned shards
     Peers-->>Node: Send persistence confirmation
     Node->>Node: Wait for persistence confirmations from m nodes
+    Node->>Peers: Release write lock
     Node-->>Gateway: Return success confirmation
     Gateway-->>User: "Secret Updated"
 ```
@@ -61,7 +62,7 @@ sequenceDiagram
 ## 2. Concurrent updates to the same secret
 
 - Two update requests for the same key may be processed concurrently by different nodes.
-- Nodes and peers use persisted state, temporary state, and Lamport ordering to resolve which version is accepted first.
+- Nodes and peers use persisted state, temporary state, and voting-phase lock ownership to resolve which update proceeds first.
 - The earlier update continues through quorum and persistence, while the later conflicting update is rejected or retried with a newer version.
 - The client receives success for the accepted update and an error for the rejected one.
 - **Response**: `200 OK` for the accepted update; `409 Conflict` for the rejected update
@@ -72,15 +73,14 @@ sequenceDiagram
     participant Gateway
     participant Node as Cluster Node
     participant Peers as Other Nodes
-    participant Clock as Lamport Clock
-
     par Update 1
       User->>Gateway: PUT /secret {key,valueA}
-      Gateway->>Node: Forward request into cluster, one node accepts
-      Node->>Clock: Request Lamport version assignment and timestamp
-      Clock-->>Node: Return assigned version V+1 and timestamp T1
+      Gateway->>Gateway: Attach request timestamp metadata
+      Gateway->>Node: Forward request + timestamp metadata
+      Node->>Peers: Voting phase: request write lock for user:key
+      Peers-->>Node: Lock vote success (arrived first)
       Node->>Node: Split updated secret into n shards
-      Node->>Peers: Send update shards for version V+1
+      Node->>Peers: Writing phase: send update shards for version V+1
       Peers->>Peers: Store shard temporarily and check key/version state.<br>This update arrived first
       Node->>Node: Check persisted and temporary key/version state.<br>This update arrived first
       Node->>Node: Add local confirmation
@@ -88,15 +88,10 @@ sequenceDiagram
       Node->>Node: Wait for confirmations from m nodes
     and Update 2
       User->>Gateway: PUT /secret {same key, valueB}
-      Gateway->>Node: Forward request into cluster, one node accepts
-      Node->>Clock: Request Lamport version assignment and timestamp
-      Clock-->>Node: Return competing version data
-      Node->>Node: Split updated secret into n shards
-      Node->>Peers: Send update shards for same key
-      Peers->>Peers: Store shard temporarily and check key/version state.<br>This update arrived second
-      Peers-->>Node: Send failure on version conflict
-      Node->>Node: Check persisted and temporary key/version state.<br>This update arrived second
-      Node->>Node: Wait for confirmations from m nodes
+      Gateway->>Gateway: Attach request timestamp metadata
+      Gateway->>Node: Forward request + timestamp metadata
+      Node->>Peers: Voting phase: request write lock for user:key
+      Peers-->>Node: Lock vote failure (arrived second)
       Node-->>Gateway: Send error on failure response(s) or timeout
       break after error is sent to user
         Gateway-->>User: "Update 2 failed"
@@ -107,6 +102,7 @@ sequenceDiagram
     Peers->>Peers: Persist versioned shards
     Peers-->>Node: Send persistence confirmation
     Node->>Node: Wait for persistence confirmations from m nodes
+    Node->>Peers: Release write lock
     Node-->>Gateway: Return success confirmation
     Gateway-->>User: "Update 1 Accepted"
 ```
@@ -122,11 +118,11 @@ sequenceDiagram
 
 ---
 
-## 4. Clock does not return version
+## 4. Gateway metadata missing or invalid
 
-- The node requests the next Lamport version and timestamp before splitting and distributing shards.
-- If the clock does not return version metadata before timeout, update cannot continue.
-- The client receives: "Secret update error - clock error".
+- The node requires gateway-attached timestamp metadata before starting write coordination.
+- If metadata is missing or invalid, update cannot continue.
+- The client receives: "Secret update error - invalid request metadata".
 - **Response**: `503 Service Unavailable`
 
 ---

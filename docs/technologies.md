@@ -42,7 +42,7 @@
 
 ## PostgreSQL 18
 
-**Why we chose it:** PostgreSQL is a proven, open-source relational database with strong ACID guarantees. We use it to store user account information and secret metadata. For production we run one primary and two synchronous standbys for redundancy.
+**Why we chose it:** PostgreSQL is a proven, open-source relational database with strong ACID guarantees. We use it exclusively for user account and authentication-related data management. For production we run one primary and two synchronous standbys for redundancy.
 
 **Alternatives considered:**
 - **SQLite:** Not suitable for a multi-node, concurrent server environment.
