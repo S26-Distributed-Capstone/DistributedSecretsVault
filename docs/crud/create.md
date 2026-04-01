@@ -49,7 +49,7 @@ sequenceDiagram
     Node->>Peers: Writing phase: send n-1 shards to other nodes
     Peers->>Peers: Store shard temporarily and check key state
     Node->>Node: Add local confirmation
-    Peers-->>Node: Return confirmation if key is not persisted
+    Peers-->>Node: Return confirmation or error (key already exists / lock contention)
     Node->>Node: Wait for confirmations from m nodes
     Node->>Peers: Submit persistence request for shards
     Node->>Node: Persist local shard

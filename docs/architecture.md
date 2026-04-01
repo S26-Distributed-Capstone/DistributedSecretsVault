@@ -29,7 +29,6 @@ graph LR
 
 - User signs up through the gateway using OAuth2-compatible credentials.
 - Credentials and account records are stored in PostgreSQL only.
-- Secret data and shard metadata are not stored in PostgreSQL.
 
 ---
 
