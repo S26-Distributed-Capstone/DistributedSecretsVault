@@ -42,7 +42,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "04:30"
+      time: "04:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
     labels:
@@ -65,7 +65,7 @@ updates:
     target-branch: "main"
     schedule:
       interval: "weekly"
-      day: "tuesday"
+      day: "monday"
       time: "04:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
