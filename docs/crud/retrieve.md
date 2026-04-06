@@ -26,10 +26,9 @@ In every case the receiving node collects at least k shards (the reconstruction 
 - [7. Not Authorized to Access Secret](#7-not-authorized-to-access-secret)
 - [8. Gateway Unavailable](#8-gateway-unavailable)
 - [9. Node Unavailable](#9-node-unavailable)
-- [10. Version Metadata Unavailable](#10-version-metadata-unavailable)
-- [11. Local Shard Read Failure](#11-local-shard-read-failure)
-- [12. Version Enumeration Failure](#12-version-enumeration-failure)
-- [13. Shard Reconstruction Failure](#13-shard-reconstruction-failure)
+- [10. Local Shard Read Failure](#10-local-shard-read-failure)
+- [11. Version Enumeration Failure](#11-version-enumeration-failure)
+- [12. Shard Reconstruction Failure](#12-shard-reconstruction-failure)
 
 ---
 
@@ -201,19 +200,7 @@ sequenceDiagram
 
 ---
 
-## 10. Version Metadata Unavailable
-
-- **When it happens**: Replicated key metadata used to resolve latest version is unavailable or inconsistent.
-- **Handling**:
-    - For latest-version requests, attempt a quorum read of version metadata as a fallback.
-    - If the latest version cannot be resolved safely, return `503 Service Unavailable` with a retryable error code.
-    - For explicit version requests, bypass latest-version resolution entirely.
-    - Emit a health signal for metadata replication availability.
-- **Response**: `503 Service Unavailable`
-
----
-
-## 11. Local Shard Read Failure
+## 10. Local Shard Read Failure
 
 - **When it happens**: Local storage returns an error or corrupted shard data.
 - **Handling**:
@@ -225,7 +212,7 @@ sequenceDiagram
 
 ---
 
-## 12. Version Enumeration Failure
+## 11. Version Enumeration Failure
 
 - **When it happens**: The node cannot list versions due to metadata or storage errors.
 - **Handling**:
@@ -237,7 +224,7 @@ sequenceDiagram
 
 ---
 
-## 13. Shard Reconstruction Failure
+## 12. Shard Reconstruction Failure
 
 - **When it happens**: Collected shards fail integrity checks or reconstruction cannot complete.
 - **Handling**:
