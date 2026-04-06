@@ -55,7 +55,7 @@ sequenceDiagram
     Node->>Node: Persist local shard
     Peers->>Peers: Persist shards
     Peers-->>Node: Send persistence confirmation
-    Node->>Node: Wait for persistence confirmations from m nodes
+    Node->>Node: Wait for persistence confirmations from m - 1 nodes
     Node->>Peers: Release write lock
     Node-->>Gateway: Return success confirmation
     Gateway-->>User: "Secret Created"
