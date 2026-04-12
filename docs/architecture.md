@@ -27,15 +27,18 @@ graph LR
 
 2. New user signs up
 
-- TODO: finalize the approach
-- Ideas: hash/encrypt user credentials, use a system that doesn't require the user to store credentials (OPAQUE)
-- Assume that Oauth2 is set up
+- User signs up through the gateway using OAuth2-compatible credentials.
+- Credentials and account records are stored in PostgreSQL only.
 
 ---
 
 3. A User puts a new secret in the storage
 
 - Client sends the secret with the secret's key to any cluster node
+- Gateway attaches request timestamp metadata before forwarding the write
+- Receiving node runs two-phase commit for `user:key`:
+  - voting phase: nodes vote on write-lock ownership
+  - writing phase: lock owner writes shards and then releases lock
 - Receiving node applies Shamir's Secret Sharing in memory, splitting the secret into n shards
 - Node distributes n-1 shards to other nodes and keeps 1 shard locally
 - k shards are required to reconstruct the secret (threshold scheme)
@@ -50,12 +53,16 @@ sequenceDiagram
     participant Cluster as Other Nodes
 
     User->>Gateway: POST /secret {key, value}
-    Gateway->>Node: Forward request
+    Gateway->>Gateway: Attach request timestamp metadata
+    Gateway->>Node: Forward request + timestamp metadata
+    Node->>Cluster: Voting phase: request write lock for user:key
+    Cluster-->>Node: Vote ACKs
     Node->>Node: Split secret into n shards (in memory)<br/>Plaintext never written to disk
-    Node->>Cluster: Distribute n-1 shards (encrypted in transit)
+    Node->>Cluster: Writing phase: distribute n-1 shards (encrypted in transit)
     Node->>Node: Store local shard to disk
     Cluster->>Cluster: Store received shards to disk
-    Cluster-->>Node: ACK
+    Cluster-->>Node: Write ACK
+    Node->>Cluster: Release write lock
     Node-->>Gateway: Success + Version
     Gateway-->>User: Secret stored (version)
 ```
@@ -92,8 +99,11 @@ sequenceDiagram
 
 5. A user updates a stored secret (version control)
 
-- Each time a secret is updated (or stored), the cluster returns the secret version
-- Version is determined using a cluster-wide clock system (Lamport?)
+- Create and update both use the same two-phase commit flow with distributed write locks.
+- Phase 1 (voting phase): nodes vote on lock ownership for `user:key`; writes are blocked on other nodes until lock is released.
+- Phase 2 (writing phase): after lock quorum is reached, shards are distributed and persisted; lock is released after commit/rollback.
+- The gateway attaches request timestamp metadata to incoming write requests.
+- Each successful write returns a new secret version
 - A user can request either a specific version of the secret or the latest
 - Update creates a new set of shards for the new version (independent from previous version shards)
 - **Each version is independently sharded; old shards remain for version history**
@@ -103,18 +113,20 @@ sequenceDiagram
     participant User
     participant Gateway
     participant Node1 as Cluster Node
-    participant Clock as Lamport Clock
     participant Nodes as Other Nodes
 
     User->>Gateway: PUT /secret/{key} {new_value}
-    Gateway->>Node1: Forward update request
-    Node1->>Clock: Request next version
-    Clock-->>Node1: New version number
+    Gateway->>Gateway: Attach request timestamp metadata
+    Gateway->>Node1: Forward update request + timestamp metadata
+    Node1->>Nodes: Voting phase: request write lock for user:key
+    Nodes-->>Node1: Vote responses
+    Node1->>Node1: Lock quorum reached
     Node1->>Node1: Split new secret value into n shards (in memory)<br/>Plaintext never written to disk
-    Node1->>Nodes: Distribute n-1 shards with new version
+    Node1->>Nodes: Writing phase: distribute n-1 shards with new version
     Node1->>Node1: Store local shard to disk
     Nodes->>Nodes: Store received shards to disk
-    Nodes-->>Node1: ACK
+    Nodes-->>Node1: Write ACK
+    Node1->>Nodes: Release write lock
     Node1-->>Gateway: Success + New Version
     Gateway-->>User: Secret updated (version: N+1)
 ```
@@ -216,4 +228,6 @@ sequenceDiagram
 
 9. Node failure recovery
 
-- TODO: finalize the approach
+- If failure occurs in the **voting phase**, no shard writes are committed and lock requests expire/rollback.
+- If failure occurs in the **writing phase**, partially written shards are rolled back using the write transaction ID before lock release.
+- Recovered nodes rejoin via heartbeat/gossip and only accept writes after lock state is synchronized.
