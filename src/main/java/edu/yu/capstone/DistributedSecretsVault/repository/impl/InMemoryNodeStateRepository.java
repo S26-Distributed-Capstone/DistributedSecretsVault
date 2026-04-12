@@ -5,9 +5,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.stereotype.Repository;
+
 import edu.yu.capstone.DistributedSecretsVault.domain.model.NodeState;
 import edu.yu.capstone.DistributedSecretsVault.repository.NodeStateRepository;
 
+@Repository
 public class InMemoryNodeStateRepository implements NodeStateRepository {
     private final Map<String, NodeState> states = new ConcurrentHashMap<>();
 

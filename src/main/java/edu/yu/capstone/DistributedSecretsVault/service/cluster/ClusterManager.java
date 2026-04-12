@@ -2,9 +2,12 @@ package edu.yu.capstone.DistributedSecretsVault.service.cluster;
 
 import java.util.List;
 
+import org.springframework.stereotype.Service;
+
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 
+@Service
 public class ClusterManager {
     public boolean tryAcquireWriteLock(SecretKey key, long timestampEpochMillis) {
         throw new UnsupportedOperationException("Not implemented yet");

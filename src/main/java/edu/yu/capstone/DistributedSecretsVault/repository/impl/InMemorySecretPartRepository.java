@@ -6,10 +6,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.stereotype.Repository;
+
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
+@Repository
 public class InMemorySecretPartRepository implements SecretPartRepository {
     private final Map<String, SecretPart> parts = new ConcurrentHashMap<>();
 

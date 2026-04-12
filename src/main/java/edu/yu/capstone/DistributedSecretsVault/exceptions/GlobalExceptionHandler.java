@@ -29,4 +29,25 @@ public class GlobalExceptionHandler {
     public ErrorResponse handleAuthenticationFailedException(AuthenticationFailedException e) {
         return new ErrorResponse(e.getMessage());
     }
+
+    @ExceptionHandler(InsufficientPartsException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    @ResponseBody
+    public ErrorResponse handleInsufficientPartsException(InsufficientPartsException e) {
+        return new ErrorResponse(e.getMessage());
+    }
+
+    @ExceptionHandler(NodeCommunicationException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    @ResponseBody
+    public ErrorResponse handleNodeCommunicationException(NodeCommunicationException e) {
+        return new ErrorResponse(e.getMessage());
+    }
+
+    @ExceptionHandler(VersionConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    @ResponseBody
+    public ErrorResponse handleVersionConflictException(VersionConflictException e) {
+        return new ErrorResponse(e.getMessage());
+    }
 }
