@@ -1,6 +1,6 @@
 package edu.yu.capstone.DistributedSecretsVault.exceptions;
 
-public class NodeCommunicationException extends RuntimeException {
+public class NodeCommunicationException extends ServiceUnavailableException {
     public NodeCommunicationException() {
         super("Node communication failure");
     }
