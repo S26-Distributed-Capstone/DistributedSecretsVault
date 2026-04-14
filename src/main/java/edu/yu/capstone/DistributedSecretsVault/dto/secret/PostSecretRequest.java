@@ -1,9 +1,13 @@
 package edu.yu.capstone.DistributedSecretsVault.dto.secret;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class PostSecretRequest {
-    private final String secretName;
-    private final String secretValue;
+    private String secretName;
+    private String secretValue;
 }

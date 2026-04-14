@@ -1,11 +1,15 @@
 package edu.yu.capstone.DistributedSecretsVault.dto.secret;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class PutSecretRequest {
-    private final String secretCurrentName;
-    private final String secretCurrentValue;
-    private final String secretUpdatedName;
-    private final String secretUpdatedValue;
+    private String secretCurrentName;
+    private String secretCurrentValue;
+    private String secretUpdatedName;
+    private String secretUpdatedValue;
 }
