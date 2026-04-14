@@ -21,7 +21,7 @@ import edu.yu.capstone.DistributedSecretsVault.util.ClockUtil;
 //TODO epoch is only 1L hardcode, needs to be updated when we transition systems to multi-node
 @Service
 public class SecretServiceImpl implements SecretService {
-    private final SecretPartRepository secretPartRepository;
+    private final SecretPartRepository secretPartRepository; // way to access the data, needs to be updated to incorporate redis or postgres
     private final ClusterManager clusterManager;
     private final SecretSharingService secretSharingService;
     private final SecretReconstructionService secretReconstructionService;
@@ -56,7 +56,7 @@ public class SecretServiceImpl implements SecretService {
         for (SecretPart part : parts) {
             part.setVersion(version);
             part.setEpoch(epoch);
-            secretPartRepository.savePart(part);
+            secretPartRepository.savePart(part); // split to the other nodes
         }
         return buildSecretVersion(key, version, epoch);
     }
