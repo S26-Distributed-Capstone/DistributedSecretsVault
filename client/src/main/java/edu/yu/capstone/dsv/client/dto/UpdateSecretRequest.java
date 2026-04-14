@@ -4,7 +4,8 @@ public record UpdateSecretRequest(
         String secretCurrentName,
         String secretCurrentValue,
         String secretUpdatedName,
-        String secretUpdatedValue
+        String secretUpdatedValue,
+        String authKey
 ) {
 }
 
