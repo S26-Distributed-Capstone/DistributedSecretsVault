@@ -23,6 +23,7 @@ This `client` folder is a standalone project that represents the external client
 - `DSV_CLIENT_MAX_RETRIES` (default `2`)
 - `DSV_CLIENT_RETRY_DELAY_MS` (default `200`)
 - `DSV_CLIENT_BEARER_TOKEN` (optional)
+- `DSV_CLIENT_DEBUG_HTTP` (optional, `true` to print request attempt/status logs)
 
 ## Run tests
 
@@ -31,14 +32,23 @@ Set-Location "C:\Users\Ari\CS Projects\DistributedSecretsVault\client"
 ..\mvnw.cmd test
 ```
 
-## Run CLI examples
+## Run CLI (interactive)
 
 ```powershell
 Set-Location "C:\Users\Ari\CS Projects\DistributedSecretsVault\client"
 $env:DSV_API_BASE_URL="http://localhost:8080"
-..\mvnw.cmd -q exec:java -Dexec.args="create db-password hunter2"
-..\mvnw.cmd -q exec:java -Dexec.args="get db-password"
-..\mvnw.cmd -q exec:java -Dexec.args="update db-password hunter2 db-password new-secret"
-..\mvnw.cmd -q exec:java -Dexec.args="delete db-password"
+..\mvnw.cmd -q exec:java
+```
+
+Then type commands in the prompt:
+
+```text
+ping
+create db-password hunter2 admin
+get db-password
+update db-password hunter2 db-password new-secret
+delete db-password
+help
+exit
 ```
 

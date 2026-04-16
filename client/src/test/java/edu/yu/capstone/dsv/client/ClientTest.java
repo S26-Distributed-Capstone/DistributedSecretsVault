@@ -16,6 +16,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClientTest {
 
@@ -29,7 +31,9 @@ class ClientTest {
 
         server.createContext("/api/v1/secrets", exchange -> {
             switch (exchange.getRequestMethod()) {
-                case "POST" -> respond(exchange, 201, "created");
+                case "POST" -> {
+                    respond(exchange, 201, "created");
+                }
                 case "PUT" -> respond(exchange, 200, "updated");
                 case "DELETE" -> respond(exchange, 204, "");
                 default -> respond(exchange, 405, "method not allowed");
@@ -44,6 +48,23 @@ class ClientTest {
             respond(exchange, 405, "method not allowed");
         });
 
+        server.createContext("/api/v1/secrets/missing", exchange -> {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 404, "{\"message\":\"Secret not found\"}");
+                return;
+            }
+            respond(exchange, 405, "method not allowed");
+        });
+
+        server.createContext("/api/v1/secrets/html-page", exchange -> {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                exchange.getResponseHeaders().add("Content-Type", "text/html");
+                respond(exchange, 200, "<!doctype html><html><body>Filter Page</body></html>");
+                return;
+            }
+            respond(exchange, 405, "method not allowed");
+        });
+
         AtomicInteger flakyCounter = new AtomicInteger(0);
         server.createContext("/api/v1/secrets/flaky", exchange -> {
             if (flakyCounter.incrementAndGet() < 3) {
@@ -51,6 +72,14 @@ class ClientTest {
                 return;
             }
             respond(exchange, 200, "stable");
+        });
+
+        server.createContext("/health", exchange -> {
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, "method not allowed");
+                return;
+            }
+            respond(exchange, 200, "OK");
         });
 
         server.start();
@@ -76,10 +105,10 @@ class ClientTest {
 
     @Test
     void supportsCrudRequests() {
-        String created = client.createSecret(new CreateSecretRequest("db-password", "hunter2"));
+        String created = client.createSecret(new CreateSecretRequest("db-password", "hunter2", ""));
         String retrieved = client.getSecret("my-secret");
-        String updated = client.updateSecret(new UpdateSecretRequest("name", "old", "name", "new"));
-        client.deleteSecret(new DeleteSecretRequest("name"));
+        String updated = client.updateSecret(new UpdateSecretRequest("name", "old", "name", "new", ""));
+        client.deleteSecret(new DeleteSecretRequest("name", ""));
 
         assertEquals("created", created);
         assertEquals("retrieved", retrieved);
@@ -91,6 +120,27 @@ class ClientTest {
         String result = client.getSecret("flaky");
         assertEquals("stable", result);
     }
+
+    @Test
+    void includesServerMessageInErrors() {
+        ClientException ex = assertThrows(ClientException.class, () -> client.getSecret("missing"));
+        assertEquals(404, ex.getStatusCode());
+        assertTrue(ex.getMessage().contains("Unexpected response status"));
+        assertTrue(ex.getResponseBody().contains("\"message\""));
+    }
+
+    @Test
+    void rejectsHtmlSuccessResponses() {
+        ClientException ex = assertThrows(ClientException.class, () -> client.getSecret("html-page"));
+        assertEquals(200, ex.getStatusCode());
+        assertTrue(ex.getMessage().contains("Received HTML content instead of API response"));
+    }
+
+    @Test
+    void pingReturnsHealthStatus() {
+        assertEquals("OK", client.ping());
+    }
+
 
     private static void respond(HttpExchange exchange, int statusCode, String body) throws IOException {
         byte[] payload = body.getBytes(StandardCharsets.UTF_8);

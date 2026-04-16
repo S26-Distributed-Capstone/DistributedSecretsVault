@@ -47,4 +47,5 @@ public record ClientProperties(
             return fallback;
         }
     }
+
 }
