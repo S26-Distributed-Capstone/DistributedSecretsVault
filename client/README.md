@@ -28,14 +28,14 @@ This `client` folder is a standalone project that represents the external client
 ## Run tests
 
 ```powershell
-Set-Location "C:\Users\Ari\CS Projects\DistributedSecretsVault\client"
+Set-Location "\DistributedSecretsVault\client"
 ..\mvnw.cmd test
 ```
 
 ## Run CLI (interactive)
 
 ```powershell
-Set-Location "C:\Users\Ari\CS Projects\DistributedSecretsVault\client"
+Set-Location "\DistributedSecretsVault\client"
 $env:DSV_API_BASE_URL="http://localhost:8080"
 ..\mvnw.cmd -q exec:java
 ```
