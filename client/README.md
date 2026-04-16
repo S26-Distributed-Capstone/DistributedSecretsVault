@@ -9,11 +9,17 @@ This `client` folder is a standalone project that represents the external client
 - Supports optional bearer token auth.
 - Retries retryable failures (`503`, `429`) with fixed delay.
 
+## Requirements
+
+- The Distributed Secrets Vault server must already be running.
+- Set `DSV_API_BASE_URL` to the server or gateway URL you want the CLI to call.
+- The client is CLI-only; it does not start its own server.
+- The commands to start the client must be run from the 'client' folder
+
 ## Project structure
 
 - `src/main/java/.../Client.java` - reusable HTTP client.
-- `src/main/java/.../ClientCli.java` - tiny runnable CLI.
-- `src/test/java/.../ClientTest.java` - local HTTP server tests.
+- `src/main/java/.../ClientCli.java` - runnable CLI.
 
 ## Environment variables
 
@@ -25,19 +31,20 @@ This `client` folder is a standalone project that represents the external client
 - `DSV_CLIENT_BEARER_TOKEN` (optional)
 - `DSV_CLIENT_DEBUG_HTTP` (optional, `true` to print request attempt/status logs)
 
-## Run tests
-
-```powershell
-Set-Location "\DistributedSecretsVault\client"
-..\mvnw.cmd test
-```
-
 ## Run CLI (interactive)
 
+### Windows (PowerShell)
+
 ```powershell
-Set-Location "\DistributedSecretsVault\client"
 $env:DSV_API_BASE_URL="http://localhost:8080"
-..\mvnw.cmd -q exec:java
+..\mvnw exec:java
+```
+
+### macOS / Linux (bash or zsh)
+
+```bash
+export DSV_API_BASE_URL="http://localhost:8080"
+../mvnw exec:java
 ```
 
 Then type commands in the prompt:
