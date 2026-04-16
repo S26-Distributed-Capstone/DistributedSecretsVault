@@ -1,8 +1,8 @@
 package edu.yu.capstone.DistributedSecretsVault.exceptions;
 
 /**
- * Thrown when fewer than k shards are available for secret reconstruction,
- * due to node loss, network partition, or individual read failures.
+ * Thrown when fewer than k shards (secret parts) are available for
+ * reconstruction due to node loss, network partition, or read failures.
  *
  * Maps to HTTP 503 Service Unavailable.
  *
@@ -11,7 +11,11 @@ package edu.yu.capstone.DistributedSecretsVault.exceptions;
  */
 public class InsufficientShardsException extends ServiceUnavailableException {
     public InsufficientShardsException() {
-        super("Insufficient shards available to reconstruct secret");
+        super("Insufficient secret parts to reconstruct");
+    }
+
+    public InsufficientShardsException(String message) {
+        super(message);
     }
 
     public InsufficientShardsException(int available, int required) {
