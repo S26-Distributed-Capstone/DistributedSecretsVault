@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.encrypt.SecretReconstructor;
-import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientPartsException;
+import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 
 @Service
 public class SecretReconstructionService {
@@ -17,7 +17,7 @@ public class SecretReconstructionService {
 
     public String reconstruct(List<SecretPart> parts) {
         if (parts == null || parts.isEmpty()) {
-            throw new InsufficientPartsException();
+            throw new InsufficientShardsException();
         }
         Map<Integer, byte[]> partMap = new HashMap<>();
         for (SecretPart part : parts) {
@@ -27,7 +27,7 @@ public class SecretReconstructionService {
             partMap.put(part.getPartIndex(), part.getShard());
         }
         if (partMap.isEmpty()) {
-            throw new InsufficientPartsException();
+            throw new InsufficientShardsException();
         }
         byte[] secret = secretReconstructor.reconstruct(partMap);
         return new String(secret, StandardCharsets.UTF_8);

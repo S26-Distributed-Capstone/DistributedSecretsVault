@@ -95,6 +95,7 @@ public class GlobalExceptionHandler {
     //   - QuorumNotReachedException        (create.md §7-8, update.md §5-6)
     //   - InsufficientShardsException      (retrieve.md §6, §10)
     //   - VersionEnumerationException      (retrieve.md §11)
+    //   - NodeCommunicationException       (retrieve.md §9)
     //   - base ServiceUnavailableException (create.md §3, retrieve.md §8-9, update.md §3)
 
     @ExceptionHandler(ServiceUnavailableException.class)
@@ -104,31 +105,10 @@ public class GlobalExceptionHandler {
         return new ErrorResponse(e.getMessage());
     }
 
-    @ExceptionHandler(InsufficientPartsException.class)
-    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
-    @ResponseBody
-    public ErrorResponse handleInsufficientPartsException(InsufficientPartsException e) {
-        return new ErrorResponse(e.getMessage());
-    }
-
-    @ExceptionHandler(NodeCommunicationException.class)
-    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
-    @ResponseBody
-    public ErrorResponse handleNodeCommunicationException(NodeCommunicationException e) {
-        return new ErrorResponse(e.getMessage());
-    }
-
     @ExceptionHandler(VersionConflictException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     @ResponseBody
     public ErrorResponse handleVersionConflictException(VersionConflictException e) {
-        return new ErrorResponse(e.getMessage());
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    @ResponseBody
-    public ErrorResponse handleIllegalArgumentException(IllegalArgumentException e) {
         return new ErrorResponse(e.getMessage());
     }
 }

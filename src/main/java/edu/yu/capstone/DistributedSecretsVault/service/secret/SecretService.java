@@ -12,7 +12,7 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretException;
-import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientPartsException;
+import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 import edu.yu.capstone.DistributedSecretsVault.service.cluster.ClusterManager;
@@ -90,7 +90,7 @@ public class SecretService {
         List<SecretPart> parts = secretPartRepository.findParts(key, resolvedVersion);
         int threshold = resolveThreshold(resolveTotalParts());
         if (parts.size() < threshold) {
-            throw new InsufficientPartsException();
+            throw new InsufficientShardsException();
         }
         List<SecretPart> selected = parts.stream()
                 .sorted(Comparator.comparingInt(SecretPart::getPartIndex))
@@ -110,7 +110,7 @@ public class SecretService {
         versions.stream().sorted().forEach(version -> {
             List<SecretPart> parts = secretPartRepository.findParts(key, version);
             if (parts.size() < threshold) {
-                throw new InsufficientPartsException();
+                throw new InsufficientShardsException();
             }
             List<SecretPart> selected = parts.stream()
                     .sorted(Comparator.comparingInt(SecretPart::getPartIndex))
