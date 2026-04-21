@@ -1,31 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>4.0.5</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<relativePath /> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>edu.yu.capstone</groupId>
 	<artifactId>DistributedSecretsVault</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>DistributedSecretsVault</name>
 	<description>A distributed secrets vault that stores opaque secret values durably and serves them to authorized callers across multiple nodes.</description>
-    <url>https://github.com/S26-Distributed-Capstone/DistributedSecretsVault</url>
+	<url>https://github.com/S26-Distributed-Capstone/DistributedSecretsVault</url>
 	<licenses>
-        <license>
-            <name>MIT License</name>
-            <url>https://opensource.org/licenses/MIT</url>
-            <distribution>repo</distribution>
-        </license>
-    </licenses>
+		<license>
+			<name>MIT License</name>
+			<url>https://opensource.org/licenses/MIT</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
 	<developers>
-        <developer>
-            <name>The Distributed Secrets Vault Team</name>
-            <organization>YU Capstone</organization>
-        </developer>
+		<developer>
+			<name>The Distributed Secrets Vault Team</name>
+			<organization>YU Capstone</organization>
+		</developer>
 	</developers>
 	<scm>
 		<connection>scm:git:git://github.com/S26-Distributed-Capstone/DistributedSecretsVault.git</connection>
@@ -57,33 +58,33 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
-    <dependency>
-      <groupId>org.postgresql</groupId>
-      <artifactId>postgresql</artifactId>
-      <scope>runtime</scope>
-    </dependency>
-	  <dependency>
-	    <groupId>org.springframework.boot</groupId>
-	    <artifactId>spring-boot-starter-data-redis</artifactId>
-	  </dependency>
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>com.google.code.gson</groupId>
 			<artifactId>gson</artifactId>
 			<version>2.10.1</version>
 		</dependency>
-    <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-pool2</artifactId>
-    </dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-pool2</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-  	  <groupId>com.codahale</groupId>
-  		<artifactId>shamir</artifactId>
-  		<version>0.7.0</version>
+			<groupId>com.codahale</groupId>
+			<artifactId>shamir</artifactId>
+			<version>0.7.0</version>
 		</dependency>
 
 		<!-- <dependency>
@@ -111,7 +112,7 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-    </dependencies>
+	</dependencies>
 
 	<build>
 		<plugins>
