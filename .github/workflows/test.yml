@@ -13,8 +13,8 @@ jobs:
 
     permissions:
       contents: read
-      pull-requests: write  # Required to post PR comments
-      checks: write         # Required for test reporter
+      pull-requests: write # Required to post PR comments
+      checks: write # Required for test reporter
 
     # TODO: Add Redis and PostgreSQL service containers when integration tests require them
 
@@ -34,7 +34,7 @@ jobs:
         # TODO: Add SPRING_PROFILES_ACTIVE and service environment variables when needed
 
       - name: Publish test results
-        uses: dorny/test-reporter@v2.5.0
+        uses: dorny/test-reporter@v3.0.0
         if: always()
         with:
           name: Maven Test Results
@@ -42,17 +42,75 @@ jobs:
           reporter: java-junit
           fail-on-error: false
 
-      - name: Generate JaCoCo coverage report
+      - name: Build testing report payload
         if: always()
-        run: ./mvnw jacoco:report
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
 
-      - name: Add coverage comment to PR
-        uses: madrapps/jacoco-report@v1.7.2
-        if: always()
+          tests=0
+          failures=0
+          errors=0
+          skipped=0
+          duration=0
+
+          if compgen -G "target/surefire-reports/*.xml" > /dev/null; then
+            tests=$(grep -h -oE 'tests="[0-9]+"' target/surefire-reports/*.xml | sed -E 's/[^0-9]//g' | awk '{s+=$1} END {print s+0}')
+            failures=$(grep -h -oE 'failures="[0-9]+"' target/surefire-reports/*.xml | sed -E 's/[^0-9]//g' | awk '{s+=$1} END {print s+0}')
+            errors=$(grep -h -oE 'errors="[0-9]+"' target/surefire-reports/*.xml | sed -E 's/[^0-9]//g' | awk '{s+=$1} END {print s+0}')
+            skipped=$(grep -h -oE 'skipped="[0-9]+"' target/surefire-reports/*.xml | sed -E 's/[^0-9]//g' | awk '{s+=$1} END {print s+0}')
+            duration=$(grep -h -oE 'time="[0-9]+(\.[0-9]+)?"' target/surefire-reports/*.xml | sed -E 's/[^0-9.]//g' | awk '{s+=$1} END {printf "%.2f", s+0}')
+          fi
+
+          passed=$((tests - failures - errors - skipped))
+          if [[ ${passed} -lt 0 ]]; then
+            passed=0
+          fi
+
+          line_coverage="N/A"
+          branch_coverage="N/A"
+          instr_coverage="N/A"
+
+          if [[ -f target/site/jacoco/jacoco.xml ]]; then
+            line_coverage=$(awk -F'"' '/<counter type="LINE"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
+            branch_coverage=$(awk -F'"' '/<counter type="BRANCH"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
+            instr_coverage=$(awk -F'"' '/<counter type="INSTRUCTION"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
+          fi
+
+          cat > pr-test-report.md <<EOF
+          ## Test And Coverage Report
+
+          **Job status:** ${JOB_STATUS}
+
+          ### Test Status
+
+          | Metric | Value |
+          | --- | --- |
+          | Total tests | ${tests} |
+          | Passed | ${passed} |
+          | Failed | ${failures} |
+          | Errors | ${errors} |
+          | Skipped | ${skipped} |
+          | Total test duration (s) | ${duration} |
+
+          ### Coverage Status
+
+          | Metric | Value |
+          | --- | --- |
+          | Instruction coverage | ${instr_coverage} |
+          | Branch coverage | ${branch_coverage} |
+          | Line coverage | ${line_coverage} |
+
+          ### Artifacts
+
+          - JUnit XML: target/surefire-reports/*.xml
+          - JaCoCo XML: target/site/jacoco/jacoco.xml
+          EOF
+
+      - name: Update PR test report comment
+        uses: marocchino/sticky-pull-request-comment@v3
+        if: ${{ always() && github.event.pull_request.head.repo.full_name == github.repository }}
         with:
-          paths: target/site/jacoco/jacoco.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
-          min-coverage-overall: 0
-          min-coverage-changed-files: 0
-          title: Code Coverage Report
-          update-comment: true
+          header: test-and-coverage-report
+          path: pr-test-report.md
