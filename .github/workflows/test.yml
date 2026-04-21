@@ -49,6 +49,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          icon_good=":white_check_mark:"
+          icon_bad=":x:"
+          icon_improve=":yellow_circle:"
+
           tests=0
           failures=0
           errors=0
@@ -68,44 +72,83 @@ jobs:
             passed=0
           fi
 
+          if [[ "${JOB_STATUS}" == "success" ]]; then
+            job_status_icon="${icon_good}"
+          elif [[ "${JOB_STATUS}" == "cancelled" ]]; then
+            job_status_icon="${icon_improve}"
+          else
+            job_status_icon="${icon_bad}"
+          fi
+
+          if [[ ${failures} -eq 0 && ${errors} -eq 0 ]]; then
+            tests_status_icon="${icon_good}"
+          else
+            tests_status_icon="${icon_bad}"
+          fi
+
           line_coverage="N/A"
           branch_coverage="N/A"
           instr_coverage="N/A"
+          line_coverage_num=-1
+          branch_coverage_num=-1
+          instr_coverage_num=-1
+
+          coverage_icon() {
+            local value="$1"
+            if (( value >= 85 )); then
+              echo "${icon_good}"
+            elif (( value >= 70 )); then
+              echo "${icon_improve}"
+            else
+              echo "${icon_bad}"
+            fi
+          }
 
           if [[ -f target/site/jacoco/jacoco.xml ]]; then
             line_coverage=$(awk -F'"' '/<counter type="LINE"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
             branch_coverage=$(awk -F'"' '/<counter type="BRANCH"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
             instr_coverage=$(awk -F'"' '/<counter type="INSTRUCTION"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
+
+            line_coverage_num=${line_coverage%%%}
+            branch_coverage_num=${branch_coverage%%%}
+            instr_coverage_num=${instr_coverage%%%}
+          fi
+
+          if [[ ${line_coverage_num} == -1 ]]; then
+            line_coverage_status="${icon_bad}"
+            branch_coverage_status="${icon_bad}"
+            instr_coverage_status="${icon_bad}"
+          else
+            line_coverage_status=$(coverage_icon "${line_coverage_num%.*}")
+            branch_coverage_status=$(coverage_icon "${branch_coverage_num%.*}")
+            instr_coverage_status=$(coverage_icon "${instr_coverage_num%.*}")
           fi
 
           cat > pr-test-report.md <<EOF
           ## Test And Coverage Report
 
-          **Job status:** ${JOB_STATUS}
+          **Job status:** ${job_status_icon} ${JOB_STATUS}
 
           ### Test Status
 
-          | Metric | Value |
-          | --- | --- |
-          | Total tests | ${tests} |
-          | Passed | ${passed} |
-          | Failed | ${failures} |
-          | Errors | ${errors} |
-          | Skipped | ${skipped} |
-          | Total test duration (s) | ${duration} |
+          | Metric | Value | Status |
+          | --- | --- | --- |
+          | Total tests | ${tests} | |
+          | Passed | ${passed} | ${tests_status_icon} |
+          | Failed | ${failures} | $([[ ${failures} -eq 0 ]] && echo "${icon_good}" || echo "${icon_bad}") |
+          | Errors | ${errors} | $([[ ${errors} -eq 0 ]] && echo "${icon_good}" || echo "${icon_bad}") |
+          | Skipped | ${skipped} | $([[ ${skipped} -eq 0 ]] && echo "${icon_good}" || echo "${icon_improve}") |
+          | Total test duration (s) | ${duration} | |
 
           ### Coverage Status
 
-          | Metric | Value |
-          | --- | --- |
-          | Instruction coverage | ${instr_coverage} |
-          | Branch coverage | ${branch_coverage} |
-          | Line coverage | ${line_coverage} |
+          | Metric | Value | Status |
+          | --- | --- | --- |
+          | Instruction coverage | ${instr_coverage} | ${instr_coverage_status} |
+          | Branch coverage | ${branch_coverage} | ${branch_coverage_status} |
+          | Line coverage | ${line_coverage} | ${line_coverage_status} |
 
-          ### Artifacts
-
-          - JUnit XML: target/surefire-reports/*.xml
-          - JaCoCo XML: target/site/jacoco/jacoco.xml
+          **Coverage thresholds:** ${icon_good} >= 85%, ${icon_improve} 70% to 84.99%, ${icon_bad} < 70%
           EOF
 
       - name: Update PR test report comment
