@@ -133,12 +133,12 @@ jobs:
 
           | Metric | Value | Status |
           | --- | --- | --- |
-          | Total tests | ${tests} | |
+          | Total tests | ${tests} | - |
           | Passed | ${passed} | ${tests_status_icon} |
           | Failed | ${failures} | $([[ ${failures} -eq 0 ]] && echo "${icon_good}" || echo "${icon_bad}") |
           | Errors | ${errors} | $([[ ${errors} -eq 0 ]] && echo "${icon_good}" || echo "${icon_bad}") |
           | Skipped | ${skipped} | $([[ ${skipped} -eq 0 ]] && echo "${icon_good}" || echo "${icon_improve}") |
-          | Total test duration (s) | ${duration} | |
+          | Total test duration (s) | ${duration} | - |
 
           ### Coverage Status
 
