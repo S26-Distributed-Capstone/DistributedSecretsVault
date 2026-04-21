@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -19,7 +18,6 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
 @Repository
-@Profile("single-redis")
 public class RedisSecretPartRepository implements SecretPartRepository {
     private static final String SAVE_PART_PATH = "redis/save_part.lua";
     private static final String GET_BY_VERSION_PATH = "redis/get_by_version.lua";

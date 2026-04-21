@@ -10,4 +10,5 @@ import lombok.NoArgsConstructor;
 public class PostSecretRequest {
     private String secretName;
     private String secretValue;
+    private String user;
 }

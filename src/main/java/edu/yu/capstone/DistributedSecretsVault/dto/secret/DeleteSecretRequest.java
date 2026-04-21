@@ -9,4 +9,5 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class DeleteSecretRequest {
     private String deleteName;
+    private String user;
 }

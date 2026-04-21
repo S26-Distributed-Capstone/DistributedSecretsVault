@@ -11,7 +11,6 @@ import edu.yu.capstone.DistributedSecretsVault.util.SecretKeyGenerator;
 
 @Service
 public class PostSecretService implements SecretCommand<PostSecretRequest, String> {
-    private static final String DEFAULT_OWNER_ID = "default";
     private final SecretService secretService;
 
     public PostSecretService(SecretService secretService) {
@@ -23,7 +22,10 @@ public class PostSecretService implements SecretCommand<PostSecretRequest, Strin
         if (input == null) {
             throw new IllegalArgumentException("Request is required");
         }
-        SecretKey key = SecretKeyGenerator.of(DEFAULT_OWNER_ID, input.getSecretName());
+        if (input.getUser() == null || input.getUser().isBlank()) {
+            throw new IllegalArgumentException("User is required");
+        }
+        SecretKey key = SecretKeyGenerator.of(input.getUser(), input.getSecretName());
         SecretVersion version = secretService.storeSecret(key, input.getSecretValue());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body("Secret created (version: " + version.getVersion() + ")");
