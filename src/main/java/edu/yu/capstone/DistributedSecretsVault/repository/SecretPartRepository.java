@@ -11,11 +11,15 @@ public interface SecretPartRepository {
 
     List<SecretPart> findParts(SecretKey key, long version);
 
+    Optional<SecretPart> findLatest(SecretKey key);
+
     List<Long> listVersions(SecretKey key);
 
     boolean exists(SecretKey key);
 
     void savePart(SecretPart part);
+
+    boolean updatePart(SecretPart part);
 
     void deleteParts(SecretKey key);
 }

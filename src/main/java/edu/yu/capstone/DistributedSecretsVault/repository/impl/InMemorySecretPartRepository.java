@@ -1,11 +1,13 @@
 package edu.yu.capstone.DistributedSecretsVault.repository.impl;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
@@ -13,6 +15,7 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
 @Repository
+@Profile("!single-redis")
 public class InMemorySecretPartRepository implements SecretPartRepository {
     private final Map<String, SecretPart> parts = new ConcurrentHashMap<>();
 
@@ -26,6 +29,14 @@ public class InMemorySecretPartRepository implements SecretPartRepository {
         return parts.values().stream()
                 .filter(part -> matchesKey(part, key) && part.getVersion() == version)
                 .toList();
+    }
+
+    @Override
+    public Optional<SecretPart> findLatest(SecretKey key) {
+        return parts.values().stream()
+                .filter(part -> matchesKey(part, key))
+                .max(Comparator.comparingLong(SecretPart::getVersion)
+                        .thenComparingInt(SecretPart::getPartIndex));
     }
 
     @Override
@@ -49,6 +60,18 @@ public class InMemorySecretPartRepository implements SecretPartRepository {
             throw new IllegalArgumentException("SecretPart and key are required");
         }
         parts.put(composeKey(part.getKey(), part.getVersion(), part.getPartIndex()), part);
+    }
+
+    @Override
+    public boolean updatePart(SecretPart part) {
+        if (part == null || part.getKey() == null) {
+            throw new IllegalArgumentException("SecretPart and key are required");
+        }
+        if (!exists(part.getKey())) {
+            return false;
+        }
+        savePart(part);
+        return true;
     }
 
     @Override

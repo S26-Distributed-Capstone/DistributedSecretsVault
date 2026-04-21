@@ -76,7 +76,9 @@ public class SecretService {
         for (SecretPart part : parts) {
             part.setVersion(version);
             part.setEpoch(epoch);
-            secretPartRepository.savePart(part);
+            if (!secretPartRepository.updatePart(part)) {
+                throw new SecretNotFoundException();
+            }
         }
         return buildSecretVersion(key, version, epoch);
     }
@@ -156,14 +158,15 @@ public class SecretService {
     }
 
     private long latestVersion(SecretKey key) {
-        return secretPartRepository.listVersions(key).stream()
-                .max(Long::compareTo)
-                .orElseThrow(SecretNotFoundException::new);
+        return secretPartRepository.findLatest(key)
+            .map(SecretPart::getVersion)
+            .orElseThrow(SecretNotFoundException::new);
     }
 
     private long nextVersion(SecretKey key) {
-        List<Long> versions = secretPartRepository.listVersions(key);
-        return versions.stream().max(Long::compareTo).orElse(0L) + 1L;
+        return secretPartRepository.findLatest(key)
+            .map(part -> part.getVersion() + 1L)
+            .orElse(1L);
     }
 
     private int resolveTotalParts() {
