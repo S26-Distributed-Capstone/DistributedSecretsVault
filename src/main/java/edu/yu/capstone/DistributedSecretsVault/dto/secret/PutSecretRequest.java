@@ -12,4 +12,5 @@ public class PutSecretRequest {
     private String secretCurrentValue;
     private String secretUpdatedName;
     private String secretUpdatedValue;
+    private String user;
 }

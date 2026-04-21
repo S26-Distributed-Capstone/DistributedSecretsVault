@@ -9,7 +9,6 @@ import edu.yu.capstone.DistributedSecretsVault.util.SecretKeyGenerator;
 
 @Service
 public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, Void> {
-    private static final String DEFAULT_OWNER_ID = "default";
     private final SecretService secretService;
 
     public DeleteSecretService(SecretService secretService) {
@@ -21,7 +20,10 @@ public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, V
         if (input == null) {
             throw new IllegalArgumentException("Request is required");
         }
-        SecretKey key = SecretKeyGenerator.of(DEFAULT_OWNER_ID, input.getDeleteName());
+        if (input.getUser() == null || input.getUser().isBlank()) {
+            throw new IllegalArgumentException("User is required");
+        }
+        SecretKey key = SecretKeyGenerator.of(input.getUser(), input.getDeleteName());
         secretService.deleteSecret(key);
         return ResponseEntity.noContent().build();
     }

@@ -10,7 +10,6 @@ import edu.yu.capstone.DistributedSecretsVault.util.SecretKeyGenerator;
 
 @Service
 public class PutSecretService implements SecretCommand<PutSecretRequest, String> {
-    private static final String DEFAULT_OWNER_ID = "default";
     private final SecretService secretService;
 
     public PutSecretService(SecretService secretService) {
@@ -22,6 +21,9 @@ public class PutSecretService implements SecretCommand<PutSecretRequest, String>
         if (input == null) {
             throw new IllegalArgumentException("Request is required");
         }
+        if (input.getUser() == null || input.getUser().isBlank()) {
+            throw new IllegalArgumentException("User is required");
+        }
         String currentName = input.getSecretCurrentName();
         String updatedName = input.getSecretUpdatedName();
         if (updatedName != null && !updatedName.isBlank()
@@ -29,7 +31,7 @@ public class PutSecretService implements SecretCommand<PutSecretRequest, String>
             throw new IllegalArgumentException("Renaming secrets is not supported yet");
         }
         String keyName = currentName == null || currentName.isBlank() ? updatedName : currentName;
-        SecretKey key = SecretKeyGenerator.of(DEFAULT_OWNER_ID, keyName);
+        SecretKey key = SecretKeyGenerator.of(input.getUser(), keyName);
         SecretVersion version = secretService.updateSecret(key, input.getSecretUpdatedValue());
         return ResponseEntity.ok("Secret updated (version: " + version.getVersion() + ")");
     }

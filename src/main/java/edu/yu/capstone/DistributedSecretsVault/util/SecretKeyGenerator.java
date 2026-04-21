@@ -7,6 +7,12 @@ public final class SecretKeyGenerator {
     }
 
     public static SecretKey of(String ownerId, String name) {
+        if (ownerId == null || ownerId.isBlank()) {
+            throw new IllegalArgumentException("User is required");
+        }
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Secret key is required");
+        }
         SecretKey key = new SecretKey();
         key.setOwnerId(ownerId);
         key.setName(name);
