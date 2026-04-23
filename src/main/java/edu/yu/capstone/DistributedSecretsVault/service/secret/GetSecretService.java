@@ -25,5 +25,4 @@ public class GetSecretService {
         String secretValue = secretService.getSecret(key, null);
         return ResponseEntity.ok(secretValue);
     }
-    
 }

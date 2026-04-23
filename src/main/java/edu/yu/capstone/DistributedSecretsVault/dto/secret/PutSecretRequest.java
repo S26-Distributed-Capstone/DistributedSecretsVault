@@ -9,8 +9,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PutSecretRequest {
     private String secretCurrentName;
-    private String secretCurrentValue;
-    private String secretUpdatedName;
     private String secretUpdatedValue;
     private String user;
 }
