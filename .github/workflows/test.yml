@@ -105,9 +105,23 @@ jobs:
           }
 
           if [[ -f target/site/jacoco/jacoco.xml ]]; then
-            line_coverage=$(awk -F'"' '/<counter type="LINE"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
-            branch_coverage=$(awk -F'"' '/<counter type="BRANCH"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
-            instr_coverage=$(awk -F'"' '/<counter type="INSTRUCTION"/ {m=$4; c=$6} END {t=m+c; if (t>0) printf "%.2f%%", (100*c)/t; else print "0.00%"}' target/site/jacoco/jacoco.xml)
+            coverage_vals=$(python3 -c '
+          import xml.etree.ElementTree as ET
+          try:
+              root = ET.parse("target/site/jacoco/jacoco.xml").getroot()
+              def get_cov(ctype):
+                  for c in root.findall("counter"):
+                      if c.attrib.get("type") == ctype:
+                          m = int(c.attrib.get("missed", 0))
+                          cov = int(c.attrib.get("covered", 0))
+                          t = m + cov
+                          return "{:.2f}%".format(100 * cov / t) if t > 0 else "0.00%"
+                  return "0.00%"
+              print("{} {} {}".format(get_cov("LINE"), get_cov("BRANCH"), get_cov("INSTRUCTION")))
+          except Exception:
+              print("0.00% 0.00% 0.00%")
+          ')
+            read line_coverage branch_coverage instr_coverage <<< "$coverage_vals"
 
             line_coverage_num=${line_coverage%%%}
             branch_coverage_num=${branch_coverage%%%}
