@@ -38,10 +38,7 @@ public class SecretController {
 
     @GetMapping("/{id}")
     public ResponseEntity<String> getSecret(@PathVariable String id, @RequestParam("user") String user, @RequestParam(value = "version", required = false) Long version) {
-        if (version != null) {
-            return this.getSecretService.execute(user, id, version);
-        }
-        return this.getSecretService.execute(user, id);
+        return this.getSecretService.execute(user, id, version);
     }
 
     @GetMapping("/{id}/all")
