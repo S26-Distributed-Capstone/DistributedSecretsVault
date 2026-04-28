@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/v1/secrets")
 public class SecretController {
@@ -35,8 +37,13 @@ public class SecretController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<String> getSecret(@PathVariable String id, @RequestParam("user") String user) {
-        return this.getSecretService.execute(user, id);
+    public ResponseEntity<String> getSecret(@PathVariable String id, @RequestParam("user") String user, @RequestParam(value = "version", required = false) Long version) {
+        return this.getSecretService.execute(user, id, version);
+    }
+
+    @GetMapping("/{id}/all")
+    public ResponseEntity<Map<Long, String>> getAllSecrets(@PathVariable String id, @RequestParam("user") String user) {
+        return this.getSecretService.executeAll(user, id);
     }
 
     @PostMapping

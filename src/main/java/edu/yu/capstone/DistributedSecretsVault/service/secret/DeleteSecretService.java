@@ -27,6 +27,4 @@ public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, V
         secretService.deleteSecret(key);
         return ResponseEntity.noContent().build();
     }
-    
-    
 }
