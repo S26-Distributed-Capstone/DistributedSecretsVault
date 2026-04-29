@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scalecube-setup
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scalecube-headless
+  namespace: scalecube-setup
+spec:
+  # Headless service gives each pod stable DNS for peer discovery.
+  clusterIP: None
+  selector:
+    app: scalecube-demo
+  ports:
+    - name: cluster
+      port: 4801
+      targetPort: 4801
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: scalecube
+  namespace: scalecube-setup
+spec:
+  serviceName: scalecube-headless
+  replicas: 2
+  selector:
+    matchLabels:
+      app: scalecube-demo
+  template:
+    metadata:
+      labels:
+        app: scalecube-demo
+    spec:
+      containers:
+        - name: app
+          # The Spring Boot App holding our ScaleCube instance
+          image: scalecube-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4801
+              name: cluster
+            - containerPort: 8080
+              name: http
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CLUSTER_PORT
+              value: "4801"
+            - name: SEEDS
+              value: "scalecube-0.scalecube-headless.scalecube-setup.svc.cluster.local:4801,scalecube-1.scalecube-headless.scalecube-setup.svc.cluster.local:4801"
