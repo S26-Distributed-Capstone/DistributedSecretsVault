@@ -42,6 +42,18 @@ spec:
           # The Spring Boot App holding our ScaleCube instance
           image: scalecube-demo:latest
           imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
           ports:
             - containerPort: 4801
               name: cluster
