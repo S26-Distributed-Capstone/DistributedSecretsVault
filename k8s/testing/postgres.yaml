@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  # Exactly 3 nodes for Postgres (1 primary, 2 replicas)
+  replicas: 1
+  serviceName: postgres-headless
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18.2-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "dsv"
+            - name: POSTGRES_PASSWORD
+              value: "POSTGRES_PASSWORD"
+            - name: POSTGRES_DB
+              value: "dsv"
+            - name: POSTGRES_REPLICATION_USER
+              value: "replicator"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              value: "POSTGRES_REPLICATION_PASSWORD"
+            - name: POSTGRES_PRIMARY_HOST
+              value: "postgres-0.postgres-headless.default.svc.cluster.local"
+          command: ["bash", "/scripts/wrapper.sh"]
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-scripts
+              mountPath: /scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: default
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
