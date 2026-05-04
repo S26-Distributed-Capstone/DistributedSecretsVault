@@ -180,8 +180,4 @@ sequenceDiagram
 
 ## 10. Stale shards exist from a previously deleted secret
 
-- A secret was previously deleted, but up to `k − 1` nodes may still hold old shards because only `m − k + 1` delete confirmations were required.
-- Each shard is stored with an epoch number for its key; the epoch is tracked in replicated key metadata and is incremented each time a delete is confirmed.
-- When a create request arrives for the same key, the receiving node uses the latest replicated epoch and includes it in shard distribution messages to peers.
-- Peers compare the request epoch against the epoch of any locally stored shard: a lower local epoch means the shard is stale and is discarded; an equal epoch means the key already exists and the create is rejected.
-- **Response**: `201 Created` (stale shards discarded and new secret persisted successfully)
+- **TBD**: Epochs dont exist in the codebase. 
