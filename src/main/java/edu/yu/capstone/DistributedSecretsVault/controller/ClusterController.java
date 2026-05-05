@@ -5,6 +5,7 @@ import java.util.stream.Collectors;
 
 import io.scalecube.services.Microservices;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,6 +16,7 @@ import edu.yu.capstone.DistributedSecretsVault.dto.response.ClusterStatusRespons
 
 @RestController
 @RequestMapping("/api/v1/cluster")
+@ConditionalOnBean(Microservices.class)
 public class ClusterController {
 
     @Autowired

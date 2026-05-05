@@ -1,11 +1,13 @@
 package edu.yu.capstone.DistributedSecretsVault.controller;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.*;
 
 @WebMvcTest(SecretController.class)
+@Tag("slice")
 public class SecretControllerTest {
     
     @MockitoBean

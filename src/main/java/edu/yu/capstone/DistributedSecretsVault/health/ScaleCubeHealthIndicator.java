@@ -1,6 +1,7 @@
 package edu.yu.capstone.DistributedSecretsVault.health;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.stereotype.Component;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
 import io.scalecube.services.Microservices;
 
 @Component
+@ConditionalOnBean(Microservices.class)
 public class ScaleCubeHealthIndicator implements HealthIndicator {
 
     @Autowired

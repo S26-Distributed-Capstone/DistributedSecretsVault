@@ -8,6 +8,7 @@ import io.scalecube.services.transport.rsocket.RSocketServiceTransport;
 import io.scalecube.net.Address;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import reactor.core.publisher.Mono;
 
 import jakarta.annotation.PreDestroy;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
+@Profile("!test | scalecube-single-node")
 public class ScaleCubeConfig {
     private static final int DEFAULT_CLUSTER_PORT = 4801;
     private static final int DEFAULT_DNS_RESOLVE_MAX_ATTEMPTS = 5;
@@ -40,11 +42,11 @@ public class ScaleCubeConfig {
     @Bean
     public Microservices scalecubeMicroservices() {
         // 1. Read environment variables mapped from the k8s manifest
-        String podIp = System.getenv("POD_IP");
-        String clusterPortStr = System.getenv("CLUSTER_PORT");
-        String seedDnsHost = System.getenv("SEED_DNS_HOST");
-        String seedDnsPortStr = System.getenv("SEED_DNS_PORT");
-        String nodeName = System.getenv("NODE_NAME");
+        String podIp = readEnvOrSystemProperty("POD_IP");
+        String clusterPortStr = readEnvOrSystemProperty("CLUSTER_PORT");
+        String seedDnsHost = readEnvOrSystemProperty("SEED_DNS_HOST");
+        String seedDnsPortStr = readEnvOrSystemProperty("SEED_DNS_PORT");
+        String nodeName = readEnvOrSystemProperty("NODE_NAME");
 
         // 2. Set safe defaults for local development (outside k8s)
         if (podIp == null || podIp.isEmpty()) {
@@ -61,6 +63,11 @@ public class ScaleCubeConfig {
         if (seedDnsPortStr != null && !seedDnsPortStr.isEmpty()) {
             seedDnsPort = Integer.parseInt(seedDnsPortStr);
         }
+
+        if (nodeName == null || nodeName.isBlank()) {
+            nodeName = "local-node";
+        }
+        final String resolvedNodeName = nodeName;
 
         if (seedDnsHost == null || seedDnsHost.isBlank()) {
             throw new IllegalStateException("SEED_DNS_HOST must be set for DNS-based ScaleCube bootstrap");
@@ -79,10 +86,10 @@ public class ScaleCubeConfig {
                 .externalHost(podIp)
                 .externalPort(resolvedClusterPort)
                 // Implement our nested interface directly inline as an anonymous class!
-                .services((PingService) request -> Mono.just("Pong from " + nodeName))
+                .services((PingService) request -> Mono.just("Pong from " + resolvedNodeName))
                 .discovery("scalecube-demo", endpoint -> new ScalecubeServiceDiscovery(endpoint)
                         .options(opts -> opts
-                                .memberAlias(nodeName))
+                                .memberAlias(resolvedNodeName))
                         .membership(cfg -> cfg.seedMembers(seedMembers))
                         .transport(cfg -> cfg.port(resolvedClusterPort))
                 )
@@ -147,5 +154,13 @@ public class ScaleCubeConfig {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting to retry DNS seed resolution", interruptedException);
         }
+    }
+
+    private static String readEnvOrSystemProperty(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            value = System.getProperty(key);
+        }
+        return value;
     }
 }
