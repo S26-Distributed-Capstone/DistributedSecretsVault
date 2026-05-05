@@ -112,8 +112,6 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- ScaleCube Clustering and Services -->
         <dependency>
             <groupId>io.scalecube</groupId>
             <artifactId>scalecube-services</artifactId>
