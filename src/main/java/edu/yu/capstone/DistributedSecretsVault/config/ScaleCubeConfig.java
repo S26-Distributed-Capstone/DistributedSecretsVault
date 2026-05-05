@@ -6,7 +6,6 @@ import io.scalecube.services.annotations.ServiceMethod;
 import io.scalecube.services.discovery.ScalecubeServiceDiscovery;
 import io.scalecube.services.transport.rsocket.RSocketServiceTransport;
 import io.scalecube.net.Address;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Mono;
@@ -19,14 +18,9 @@ import java.util.List;
 
 @Configuration
 public class ScaleCubeConfig {
-    @Value("${scalecube.cluster.default-port}")
-    private int defaultClusterPort;
-
-    @Value("${scalecube.dns.resolve.max-attempts}")
-    private int dnsResolveMaxAttempts;
-
-    @Value("${scalecube.dns.resolve.retry-delay-ms}")
-    private long dnsResolveRetryDelayMs;
+    private static final int DEFAULT_CLUSTER_PORT = 4801;
+    private static final int DEFAULT_DNS_RESOLVE_MAX_ATTEMPTS = 5;
+    private static final long DEFAULT_DNS_RESOLVE_RETRY_DELAY_MS = 1000L;
 
     @FunctionalInterface
     interface DnsResolver {
@@ -57,7 +51,7 @@ public class ScaleCubeConfig {
             podIp = "localhost";
         }
 
-        int clusterPort = defaultClusterPort;
+        int clusterPort = DEFAULT_CLUSTER_PORT;
         if (clusterPortStr != null && !clusterPortStr.isEmpty()) {
             clusterPort = Integer.parseInt(clusterPortStr);
         }
@@ -73,8 +67,8 @@ public class ScaleCubeConfig {
         }
         seedDnsHost = seedDnsHost.trim();
 
-        Address[] seedMembers = resolveSeedMembersWithRetry(seedDnsHost, seedDnsPort, dnsResolveMaxAttempts,
-                dnsResolveRetryDelayMs, InetAddress::getAllByName);
+        Address[] seedMembers = resolveSeedMembersWithRetry(seedDnsHost, seedDnsPort,
+                DEFAULT_DNS_RESOLVE_MAX_ATTEMPTS, DEFAULT_DNS_RESOLVE_RETRY_DELAY_MS, InetAddress::getAllByName);
 
         System.out.println("Starting ScaleCube node on " + podIp + ":" + resolvedClusterPort);
         System.out.println("ScaleCube DNS seed host: " + seedDnsHost + ":" + seedDnsPort);
