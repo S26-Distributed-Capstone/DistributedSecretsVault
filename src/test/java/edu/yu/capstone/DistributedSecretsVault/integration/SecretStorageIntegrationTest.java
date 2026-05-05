@@ -2,6 +2,10 @@ package edu.yu.capstone.DistributedSecretsVault.integration;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import javax.sql.DataSource;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 
 /**
  * Integration tests for complete secret storage component of the Distributed Secrets Vault.
@@ -9,6 +13,16 @@ import org.springframework.boot.test.context.SpringBootTest;
  */
 @SpringBootTest
 public class SecretStorageIntegrationTest {
+
+    @MockitoBean
+    private DataSource dataSource;
+
+    @MockitoBean
+    private RedisConnectionFactory redisConnectionFactory;
+
+    @MockitoBean
+    private ReactiveRedisConnectionFactory reactiveRedisConnectionFactory;
+
     @Test
     public void testSecretStorageHappyPath() {
 

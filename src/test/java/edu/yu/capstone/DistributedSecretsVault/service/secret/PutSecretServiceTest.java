@@ -64,4 +64,3 @@ public class PutSecretServiceTest {
         verify(secretService).updateSecret(any(SecretKey.class), eq("newVal"));
     }
 }
-

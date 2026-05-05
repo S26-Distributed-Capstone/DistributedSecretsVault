@@ -5,4 +5,3 @@ package edu.yu.capstone.DistributedSecretsVault.service.cluster;
  */
 class NodeDiscoveryServiceTest {
 }
-

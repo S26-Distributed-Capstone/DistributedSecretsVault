@@ -54,4 +54,3 @@ public class DeleteSecretServiceTest {
         verify(secretService).deleteSecret(any(SecretKey.class));
     }
 }
-

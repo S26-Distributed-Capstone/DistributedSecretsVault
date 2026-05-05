@@ -66,4 +66,3 @@ public class PostSecretServiceTest {
         verify(secretService).storeSecret(any(SecretKey.class), eq("value1"));
     }
 }
-

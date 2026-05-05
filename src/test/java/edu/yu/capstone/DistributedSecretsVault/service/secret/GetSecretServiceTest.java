@@ -78,4 +78,3 @@ public class GetSecretServiceTest {
         assertEquals(expected, response.getBody());
     }
 }
-
