@@ -23,5 +23,8 @@ spec:
   selector:
     app: dsv-app
   ports:
+    - name: cluster
+      port: 4801
+      targetPort: 4801
     - port: 8080
       targetPort: 8080

@@ -154,7 +154,19 @@ To facilitate internal communications without going through the external ingress
 
 A standard Kubernetes Service (like `dsv-app-service`) provides a single IP that load-balances across all healthy pods. A Headless Service (`ClusterIP: None`) bypasses the proxy and returns the raw A-records for *every matching Pod endpoint*.
 
-* `dsv-app-headless`: Allows an internal node to fetch the raw IPs of all other agent nodes for Gossip protocols or internal synchronizations.
+For ScaleCube membership, startup is DNS-based in both production and testing:
+
+* `SEED_DNS_HOST=dsv-app-headless.default.svc.cluster.local`
+* `SEED_DNS_PORT=4801` and `CLUSTER_PORT=4801`
+* `dsv-app-headless` publishes port `4801` so each worker can resolve and join currently active worker nodes without hard-coded seed lists.
+* ScaleCube retry/default behavior is configured in `src/main/resources/application.properties`:
+  * `scalecube.cluster.default-port=4801`
+  * `scalecube.dns.resolve.max-attempts=5`
+  * `scalecube.dns.resolve.retry-delay-ms=1000`
+
+`ScaleCubeConfig` resolves `SEED_DNS_HOST` to all available pod IPs and feeds those addresses into ScaleCube membership seed discovery.
+
+* `dsv-app-headless`: Returns all DSV worker pod A-records used for ScaleCube peer discovery.
 * `postgres-headless`: Allows the application layer to reliably locate `postgres-0.postgres-headless.default.svc.cluster.local` as the permanent primary database URL.
 
 ---
@@ -164,3 +176,5 @@ A standard Kubernetes Service (like `dsv-app-service`) provides a single IP that
 To facilitate local testing via Docker Desktop, Minikube, or K3d without needing a multi-node architecture, the `k8s/testing` directory contains versions of these YAML files with the `podAntiAffinity` and `nodeAffinity` constraints stripped out, and the replica counts reduced to `1`. 
 
 Because of the intelligent Postgres wrapper, scaling `postgres` to `1` replica simply builds the `postgres-0` StatefulSet and seamlessly behaves as a standalone database!
+
+ScaleCube discovery remains identical to production in testing: the worker still resolves `dsv-app-headless` DNS and joins peers over port `4801`; only replica counts and scheduling constraints differ.
