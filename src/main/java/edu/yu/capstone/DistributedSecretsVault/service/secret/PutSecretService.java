@@ -24,16 +24,8 @@ public class PutSecretService implements SecretCommand<PutSecretRequest, String>
         if (input.getUser() == null || input.getUser().isBlank()) {
             throw new IllegalArgumentException("User is required");
         }
-        String currentName = input.getSecretCurrentName();
-        String updatedName = input.getSecretUpdatedName();
-        if (updatedName != null && !updatedName.isBlank()
-                && currentName != null && !currentName.equals(updatedName)) {
-            throw new IllegalArgumentException("Renaming secrets is not supported yet");
-        }
-        String keyName = currentName == null || currentName.isBlank() ? updatedName : currentName;
-        SecretKey key = SecretKeyGenerator.of(input.getUser(), keyName);
+        SecretKey key = SecretKeyGenerator.of(input.getUser(), input.getSecretCurrentName());
         SecretVersion version = secretService.updateSecret(key, input.getSecretUpdatedValue());
         return ResponseEntity.ok("Secret updated (version: " + version.getVersion() + ")");
     }
-
 }

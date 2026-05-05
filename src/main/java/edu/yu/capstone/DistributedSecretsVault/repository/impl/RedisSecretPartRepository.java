@@ -17,6 +17,8 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
+// TODO attempt to switch from using a raw list for listVersionsScript
+
 @Repository
 public class RedisSecretPartRepository implements SecretPartRepository {
     private static final String SAVE_PART_PATH = "redis/save_part.lua";

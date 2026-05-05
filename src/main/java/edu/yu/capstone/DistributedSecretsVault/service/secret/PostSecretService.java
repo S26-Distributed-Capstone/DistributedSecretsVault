@@ -30,5 +30,4 @@ public class PostSecretService implements SecretCommand<PostSecretRequest, Strin
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body("Secret created (version: " + version.getVersion() + ")");
     }
-
 }
