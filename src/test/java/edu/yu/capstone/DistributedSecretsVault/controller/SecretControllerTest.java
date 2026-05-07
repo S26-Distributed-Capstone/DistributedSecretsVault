@@ -1,5 +1,6 @@
 package edu.yu.capstone.DistributedSecretsVault.controller;
 
+import org.junit.jupiter.api.Tag;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.DeleteSecretRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PostSecretRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PutSecretRequest;
@@ -21,6 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(SecretController.class)
+@Tag("slice")
 public class SecretControllerTest {
 
     @Autowired

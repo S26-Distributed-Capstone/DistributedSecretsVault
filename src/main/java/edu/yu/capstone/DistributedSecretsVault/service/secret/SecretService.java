@@ -15,25 +15,22 @@ import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretExcepti
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
-import edu.yu.capstone.DistributedSecretsVault.service.cluster.ClusterManager;
 import edu.yu.capstone.DistributedSecretsVault.util.ClockUtil;
 
 // TODO epoch is only 1L hardcode, needs to be updated when we transition systems to multi-node
 @Service
 public class SecretService {
-    private final SecretPartRepository secretPartRepository; // way to access the data, needs to be updated to incorporate redis or postgres
-    private final ClusterManager clusterManager;
+    private final SecretPartRepository secretPartRepository; // way to access the data, needs to be updated to
+                                                             // incorporate redis or postgres
     private final SecretSharingService secretSharingService;
     private final SecretReconstructionService secretReconstructionService;
     private final ClusterConfig clusterConfig;
 
     public SecretService(SecretPartRepository secretPartRepository,
-            ClusterManager clusterManager,
             SecretSharingService secretSharingService,
             SecretReconstructionService secretReconstructionService,
             ClusterConfig clusterConfig) {
         this.secretPartRepository = secretPartRepository;
-        this.clusterManager = clusterManager;
         this.secretSharingService = secretSharingService;
         this.secretReconstructionService = secretReconstructionService;
         this.clusterConfig = clusterConfig;
@@ -159,14 +156,14 @@ public class SecretService {
 
     private long latestVersion(SecretKey key) {
         return secretPartRepository.findLatest(key)
-            .map(SecretPart::getVersion)
-            .orElseThrow(SecretNotFoundException::new);
+                .map(SecretPart::getVersion)
+                .orElseThrow(SecretNotFoundException::new);
     }
 
     private long nextVersion(SecretKey key) {
         return secretPartRepository.findLatest(key)
-            .map(part -> part.getVersion() + 1L)
-            .orElse(1L);
+                .map(part -> part.getVersion() + 1L)
+                .orElse(1L);
     }
 
     private int resolveTotalParts() {

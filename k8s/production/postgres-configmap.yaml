@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-scripts
+  namespace: default
+data:
+  wrapper.sh: |
+    #!/bin/bash
+    set -e
+
+    HOSTNAME=$(hostname)
+    
+    if [[ "$HOSTNAME" == "postgres-0" ]]; then
+      echo "Initializing Primary on $HOSTNAME"
+      # Injecting standard PostgreSQL config args
+      # Under the hood it will use the original scripts/init-primary.sh mounted via configmap if needed 
+      # pseudo-code: Setup replication users
+      exec docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf
+    else
+      echo "Initializing Replica on $HOSTNAME"
+      export REPLICA_NAME=$HOSTNAME
+      # pseudo-code: bash /scripts/replica-entrypoint.sh
+      # wait for primary (postgres-0) to become available
+      # pg_basebackup from postgres-0
+      # start replica
+      exec /scripts/replica-entrypoint.sh
+    fi

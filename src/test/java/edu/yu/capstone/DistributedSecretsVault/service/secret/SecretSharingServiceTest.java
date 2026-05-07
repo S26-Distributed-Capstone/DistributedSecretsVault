@@ -1,5 +1,8 @@
 package edu.yu.capstone.DistributedSecretsVault.service.secret;
 
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,6 +12,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("unit")
 public class SecretSharingServiceTest {
 
     private SecretSharingService secretSharingService;

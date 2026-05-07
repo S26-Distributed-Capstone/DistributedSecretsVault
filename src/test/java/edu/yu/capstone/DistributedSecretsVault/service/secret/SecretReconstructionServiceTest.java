@@ -3,6 +3,7 @@ package edu.yu.capstone.DistributedSecretsVault.service.secret;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@Tag("unit")
 public class SecretReconstructionServiceTest {
 
     private SecretReconstructionService secretReconstructionService;
