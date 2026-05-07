@@ -6,6 +6,5 @@ import lombok.Data;
 public class SecretVersion {
     private SecretKey key;
     private long version;
-    private long createdAtEpochMillis;
-    private long epoch;
+    private long timestampMillis;
 }
