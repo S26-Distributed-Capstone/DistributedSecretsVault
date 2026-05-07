@@ -8,5 +8,4 @@ public class SecretPart {
     private long version;
     private int partIndex;
     private byte[] shard;
-    private long epoch;
 }

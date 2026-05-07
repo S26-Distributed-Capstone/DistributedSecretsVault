@@ -177,16 +177,16 @@ graph LR
     end
 
     subgraph "Value Structure"
-        Value["Secret Part (Shard) + Epoch Number"]
+        Value["Secret Part (Shard)"]
     end
 
     Key -->|Maps to| Value
     Value -->|Stored in| KV
 
     subgraph "Example Entries"
-        E1["alice:db-password:1 → {shard_a1, epoch:1}"]
-        E2["alice:db-password:2 → {shard_a2, epoch:1}"]
-        E3["bob:api-key:1 → {shard_b1, epoch:2}"]
+        E1["alice:db-password:1 → {shard_a1}"]
+        E2["alice:db-password:2 → {shard_a2}"]
+        E3["bob:api-key:1 → {shard_b1}"]
     end
 
     E1 -.-> KV
@@ -198,31 +198,7 @@ graph LR
 
 8. Node failure detection
 
-- Use logging with heartbeats and gossip to determine node status
-
-```mermaid
-sequenceDiagram
-    participant Node1
-    participant Node2
-    participant Node3
-    participant Cluster as Other Nodes
-
-    loop Periodic Heartbeats
-        Node1->>Cluster: Heartbeat
-        Cluster-->>Node1: Heartbeat ACK
-    end
-
-    loop Gossip Protocol
-        Node1->>Cluster: Gossip: Node states
-        Cluster->>Node1: Gossip: Node states
-    end
-
-    Note over Node1,Cluster: Node3 stops responding
-
-    Node1->>Node1: Detect Node3 timeout
-    Node1->>Cluster: Gossip: Node3 failed
-    Cluster-->>Node1: Confirm: Node3 failed
-```
+- Node status and cluster membership is managed by ScaleCube and Kubernetes.
 
 ---
 
@@ -230,4 +206,4 @@ sequenceDiagram
 
 - If failure occurs in the **voting phase**, no shard writes are committed and lock requests expire/rollback.
 - If failure occurs in the **writing phase**, partially written shards are rolled back using the write transaction ID before lock release.
-- Recovered nodes rejoin via heartbeat/gossip and only accept writes after lock state is synchronized.
+- Recovered nodes rejoin automatically and only accept writes after lock state is synchronized.
