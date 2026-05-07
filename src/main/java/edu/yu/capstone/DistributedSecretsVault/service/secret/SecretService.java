@@ -15,9 +15,7 @@ import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretExcepti
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
-import edu.yu.capstone.DistributedSecretsVault.util.ClockUtil;
 
-// TODO epoch is only 1L hardcode, needs to be updated when we transition systems to multi-node
 @Service
 public class SecretService {
     private final SecretPartRepository secretPartRepository; // way to access the data, needs to be updated to
@@ -48,13 +46,11 @@ public class SecretService {
         int threshold = resolveThreshold(totalParts);
         List<SecretPart> parts = secretSharingService.split(key, value, threshold, totalParts);
         long version = 1L;
-        long epoch = 1L;
         for (SecretPart part : parts) {
             part.setVersion(version);
-            part.setEpoch(epoch);
             secretPartRepository.savePart(part); // split to the other nodes
         }
-        return buildSecretVersion(key, version, epoch);
+        return buildSecretVersion(key, version);
     }
 
     public SecretVersion updateSecret(SecretKey key, String value) {
@@ -66,18 +62,16 @@ public class SecretService {
             throw new SecretNotFoundException();
         }
         long version = nextVersion(key);
-        long epoch = 1L;
         int totalParts = resolveTotalParts();
         int threshold = resolveThreshold(totalParts);
         List<SecretPart> parts = secretSharingService.split(key, value, threshold, totalParts);
         for (SecretPart part : parts) {
             part.setVersion(version);
-            part.setEpoch(epoch);
             if (!secretPartRepository.updatePart(part)) {
                 throw new SecretNotFoundException();
             }
         }
-        return buildSecretVersion(key, version, epoch);
+        return buildSecretVersion(key, version);
     }
 
     public String getSecret(SecretKey key, Long version) {
@@ -134,12 +128,11 @@ public class SecretService {
         }
     }
 
-    private SecretVersion buildSecretVersion(SecretKey key, long version, long epoch) {
+    private SecretVersion buildSecretVersion(SecretKey key, long version) {
         SecretVersion secretVersion = new SecretVersion();
         secretVersion.setKey(key);
         secretVersion.setVersion(version);
-        secretVersion.setEpoch(epoch);
-        secretVersion.setCreatedAtEpochMillis(ClockUtil.nowEpochMillis());
+        secretVersion.setTimestampMillis(System.currentTimeMillis());
         return secretVersion;
     }
 

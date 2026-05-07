@@ -9,6 +9,5 @@ public class SecretPartMessage {
     private long version;
     private int partIndex;
     private byte[] shard;
-    private long epoch;
-    private long timestampEpochMillis;
+    private long timestampMillis;
 }

@@ -177,16 +177,16 @@ graph LR
     end
 
     subgraph "Value Structure"
-        Value["Secret Part (Shard) + Epoch Number"]
+        Value["Secret Part (Shard)"]
     end
 
     Key -->|Maps to| Value
     Value -->|Stored in| KV
 
     subgraph "Example Entries"
-        E1["alice:db-password:1 → {shard_a1, epoch:1}"]
-        E2["alice:db-password:2 → {shard_a2, epoch:1}"]
-        E3["bob:api-key:1 → {shard_b1, epoch:2}"]
+        E1["alice:db-password:1 → {shard_a1}"]
+        E2["alice:db-password:2 → {shard_a2}"]
+        E3["bob:api-key:1 → {shard_b1}"]
     end
 
     E1 -.-> KV

@@ -7,5 +7,4 @@ import lombok.Data;
 public class NodeState {
     private Node node;
     private NodeStatus status;
-    private long lastHeartbeatEpochMillis;
 }
