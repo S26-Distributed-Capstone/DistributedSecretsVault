@@ -1,5 +1,6 @@
 package edu.yu.capstone.DistributedSecretsVault.controller;
 
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService;
@@ -21,9 +22,10 @@ public class InternalController {
     }
 
     @GetMapping("/shard/{id}")
-    public ResponseEntity<SecretPartMessage> getShard(@PathVariable String id, @RequestParam("user") String user) {
-        SecretPartMessage shard = getShardService.getShard(user, id);
-        return ResponseEntity.ok(shard);
+    public ResponseEntity<SecretPart> getShard(@PathVariable String id,
+            @RequestParam(value = "user") String user,
+            @RequestParam(value = "version", required = false) Long version) {
+        return getShardService.getVersion(user, id, version);
     }
 
     @PostMapping("/shard")

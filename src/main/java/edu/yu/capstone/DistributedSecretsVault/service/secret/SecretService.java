@@ -1,9 +1,9 @@
 package edu.yu.capstone.DistributedSecretsVault.service.secret;
 
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -17,7 +17,6 @@ import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundExceptio
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 import edu.yu.capstone.DistributedSecretsVault.util.ClockUtil;
 
-// TODO epoch is only 1L hardcode, needs to be updated when we transition systems to multi-node
 @Service
 public class SecretService {
     private final SecretPartRepository secretPartRepository; // way to access the data, needs to be updated to
@@ -86,15 +85,11 @@ public class SecretService {
             throw new SecretNotFoundException();
         }
         long resolvedVersion = resolveVersion(key, version);
-        List<SecretPart> parts = secretPartRepository.findParts(key, resolvedVersion);
-        int threshold = resolveThreshold(resolveTotalParts());
-        if (parts.size() < threshold) {
+        Optional<SecretPart> part = secretPartRepository.findPart(key, resolvedVersion);
+        if (part.isEmpty()) {
             throw new InsufficientShardsException();
         }
-        List<SecretPart> selected = parts.stream()
-                .sorted(Comparator.comparingInt(SecretPart::getPartIndex))
-                .limit(threshold)
-                .toList();
+        List<SecretPart> selected = part.stream().toList();
         return secretReconstructionService.reconstruct(selected);
     }
 
@@ -104,17 +99,13 @@ public class SecretService {
         if (versions.isEmpty()) {
             throw new SecretNotFoundException();
         }
-        int threshold = resolveThreshold(resolveTotalParts());
         Map<Long, String> results = new LinkedHashMap<>();
         versions.stream().sorted().forEach(version -> {
-            List<SecretPart> parts = secretPartRepository.findParts(key, version);
-            if (parts.size() < threshold) {
+            Optional<SecretPart> part = secretPartRepository.findPart(key, version);
+            if (part.isEmpty()) {
                 throw new InsufficientShardsException();
             }
-            List<SecretPart> selected = parts.stream()
-                    .sorted(Comparator.comparingInt(SecretPart::getPartIndex))
-                    .limit(threshold)
-                    .toList();
+            List<SecretPart> selected = part.stream().toList();
             results.put(version, secretReconstructionService.reconstruct(selected));
         });
         return results;

@@ -33,45 +33,20 @@ public class RedisSecretPartRepositoryTest {
     @BeforeEach
     void setUp() {
         repository = new RedisSecretPartRepository(redisTemplate);
-        validKey = new SecretKey();
-        validKey.setOwnerId("user1");
-        validKey.setName("name1");
+        validKey = new SecretKey("user1", "name1");
     }
 
     @Test
     void testFindPart() {
-        SecretPart part = new SecretPart();
-        part.setKey(validKey);
-        part.setVersion(1L);
-        part.setPartIndex(1);
         String json = "{\"key\":{\"ownerId\":\"user1\",\"name\":\"name1\"},\"version\":1,\"partIndex\":1}";
         when(redisTemplate.execute(any(), anyList(), eq("1"))).thenReturn(json);
-
-        // match part index
-        Optional<SecretPart> result = repository.findPart(validKey, 1L, 1);
+        Optional<SecretPart> result = repository.findPart(validKey, 1L);
         assertTrue(result.isPresent());
-        assertEquals(1, result.get().getPartIndex());
-
-        // mismatch part index
-        Optional<SecretPart> mismatch = repository.findPart(validKey, 1L, 2);
-        assertFalse(mismatch.isPresent());
 
         // null json
         when(redisTemplate.execute(any(), anyList(), eq("1"))).thenReturn(null);
-        Optional<SecretPart> empty = repository.findPart(validKey, 1L, 1);
+        Optional<SecretPart> empty = repository.findPart(validKey, 1L);
         assertFalse(empty.isPresent());
-    }
-
-    @Test
-    void testFindParts() {
-        String json = "{\"key\":{\"ownerId\":\"user1\",\"name\":\"name1\"},\"version\":1,\"partIndex\":1}";
-        when(redisTemplate.execute(any(), anyList(), eq("1"))).thenReturn(json);
-        List<SecretPart> parts = repository.findParts(validKey, 1L);
-        assertEquals(1, parts.size());
-
-        when(redisTemplate.execute(any(), anyList(), eq("1"))).thenReturn(null);
-        List<SecretPart> empty = repository.findParts(validKey, 1L);
-        assertTrue(empty.isEmpty());
     }
 
     @Test
@@ -163,12 +138,10 @@ public class RedisSecretPartRepositoryTest {
     void testSecretKeyValidation() {
         assertThrows(IllegalArgumentException.class, () -> repository.exists(null));
 
-        SecretKey nullOwner = new SecretKey();
-        nullOwner.setOwnerId(null);
-        nullOwner.setName("name");
+        SecretKey nullOwner = new SecretKey(null, "name");
         assertThrows(IllegalArgumentException.class, () -> repository.exists(nullOwner));
 
-        SecretKey nullName = new SecretKey();
+        SecretKey nullName = new SecretKey("owner", null);
         nullName.setOwnerId("owner");
         nullName.setName(null);
         assertThrows(IllegalArgumentException.class, () -> repository.exists(nullName));
@@ -177,6 +150,6 @@ public class RedisSecretPartRepositoryTest {
     @Test
     void testDeserializeException() {
         when(redisTemplate.execute(any(), anyList(), eq("1"))).thenReturn("{ invalid json ");
-        assertThrows(IllegalStateException.class, () -> repository.findPart(validKey, 1L, 1));
+        assertThrows(IllegalStateException.class, () -> repository.findPart(validKey, 1L));
     }
 }
