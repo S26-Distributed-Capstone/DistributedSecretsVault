@@ -6,7 +6,6 @@ import org.springframework.stereotype.Service;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PutSecretRequest;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
-import edu.yu.capstone.DistributedSecretsVault.util.SecretKeyGenerator;
 
 @Service
 public class PutSecretService implements SecretCommand<PutSecretRequest, String> {
@@ -24,7 +23,7 @@ public class PutSecretService implements SecretCommand<PutSecretRequest, String>
         if (input.getUser() == null || input.getUser().isBlank()) {
             throw new IllegalArgumentException("User is required");
         }
-        SecretKey key = SecretKeyGenerator.of(input.getUser(), input.getSecretCurrentName());
+        SecretKey key = new SecretKey(input.getUser(), input.getSecretCurrentName());
         SecretVersion version = secretService.updateSecret(key, input.getSecretUpdatedValue());
         return ResponseEntity.ok("Secret updated (version: " + version.getVersion() + ")");
     }

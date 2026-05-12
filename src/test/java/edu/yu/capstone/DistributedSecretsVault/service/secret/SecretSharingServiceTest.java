@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -21,19 +20,14 @@ public class SecretSharingServiceTest {
     @BeforeEach
     void setUp() {
         secretSharingService = new SecretSharingService();
-        validKey = new SecretKey();
-        validKey.setOwnerId("user1");
-        validKey.setName("my_secret");
+        validKey = new SecretKey("user1", "my_secret");
     }
 
     @Test
     void testSplit_NullKeyThrows() {
         assertThrows(IllegalArgumentException.class, () -> secretSharingService.split(null, "val", 1, 1));
 
-        SecretKey badKey = new SecretKey();
-        assertThrows(IllegalArgumentException.class, () -> secretSharingService.split(badKey, "val", 1, 1));
-
-        badKey.setName("   ");
+        SecretKey badKey = new SecretKey("user1", "   ");
         assertThrows(IllegalArgumentException.class, () -> secretSharingService.split(badKey, "val", 1, 1));
     }
 
