@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   # Max 12 nodes based on config. Missing nodes will stay pending (Standby behavior).
-  replicas: 1
+  replicas: 3
   serviceName: dsv-app-headless
   selector:
     matchLabels:
