@@ -1,8 +1,12 @@
 package edu.yu.capstone.DistributedSecretsVault.controller;
 
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService;
+
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,9 +25,16 @@ public class InternalController {
     }
 
     @GetMapping("/shard/{id}")
-    public ResponseEntity<SecretPartMessage> getShard(@PathVariable String id, @RequestParam("user") String user) {
-        SecretPartMessage shard = getShardService.getShard(user, id);
-        return ResponseEntity.ok(shard);
+    public ResponseEntity<SecretPart> getShard(@PathVariable String id,
+            @RequestParam(value = "user") String user,
+            @RequestParam(value = "version", required = false) Long version) {
+        return getShardService.getVersion(user, id, version);
+    }
+
+    @GetMapping("/shard/{id}/all")
+    public ResponseEntity<Map<Long, SecretPart>> getAllVersions(@PathVariable String id,
+            @RequestParam(value = "user") String user) {
+        return getShardService.getAllVersions(user, id);
     }
 
     @PostMapping("/shard")

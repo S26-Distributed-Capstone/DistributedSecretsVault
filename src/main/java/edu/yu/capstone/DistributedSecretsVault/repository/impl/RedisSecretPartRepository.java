@@ -52,17 +52,12 @@ public class RedisSecretPartRepository implements SecretPartRepository {
     }
 
     @Override
-    public Optional<SecretPart> findPart(SecretKey key, long version, int partIndex) {
-        Optional<SecretPart> part = getPartByVersion(key, version);
-        if (part.isEmpty() || part.get().getPartIndex() != partIndex) {
+    public Optional<SecretPart> findPart(SecretKey key, long version) {
+        String value = redisTemplate.execute(getByVersionScript, List.of(secretKey(key)), String.valueOf(version));
+        if (value == null) {
             return Optional.empty();
         }
-        return part;
-    }
-
-    @Override
-    public List<SecretPart> findParts(SecretKey key, long version) {
-        return getPartByVersion(key, version).map(List::of).orElseGet(List::of);
+        return Optional.of(deserialize(value));
     }
 
     @Override
@@ -119,14 +114,6 @@ public class RedisSecretPartRepository implements SecretPartRepository {
     @Override
     public void deleteParts(SecretKey key) {
         redisTemplate.execute(deleteScript, List.of(secretKey(key)));
-    }
-
-    private Optional<SecretPart> getPartByVersion(SecretKey key, long version) {
-        String value = redisTemplate.execute(getByVersionScript, List.of(secretKey(key)), String.valueOf(version));
-        if (value == null) {
-            return Optional.empty();
-        }
-        return Optional.of(deserialize(value));
     }
 
     private <T> RedisScript<T> loadScript(String path, Class<T> resultType) {
