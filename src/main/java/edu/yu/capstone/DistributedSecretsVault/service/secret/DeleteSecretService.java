@@ -5,14 +5,15 @@ import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.DeleteSecretRequest;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalDeleteService;
 import edu.yu.capstone.DistributedSecretsVault.util.SecretKeyGenerator;
 
 @Service
 public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, Void> {
-    private final SecretService secretService;
+    private final InternalDeleteService internalDeleteService;
 
-    public DeleteSecretService(SecretService secretService) {
-        this.secretService = secretService;
+    public DeleteSecretService(InternalDeleteService internalDeleteService) {
+        this.internalDeleteService = internalDeleteService;
     }
 
     @Override
@@ -24,7 +25,7 @@ public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, V
             throw new IllegalArgumentException("User is required");
         }
         SecretKey key = SecretKeyGenerator.of(input.getUser(), input.getDeleteName());
-        secretService.deleteSecret(key);
+        internalDeleteService.deleteAcrossCluster(key);
         return ResponseEntity.noContent().build();
     }
 }

@@ -1,6 +1,10 @@
 package edu.yu.capstone.DistributedSecretsVault.controller;
 
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,11 +17,18 @@ public class InternalController {
 
     private final GetShardService getShardService;
     private final GiveShardService giveShardService;
+    private final DeletePrepareHandler deletePrepareHandler;
+    private final DeleteCommitHandler deleteCommitHandler;
 
     @Autowired
-    public InternalController(GetShardService getShardService, GiveShardService giveShardService) {
+    public InternalController(GetShardService getShardService,
+                              GiveShardService giveShardService,
+                              DeletePrepareHandler deletePrepareHandler,
+                              DeleteCommitHandler deleteCommitHandler) {
         this.getShardService = getShardService;
         this.giveShardService = giveShardService;
+        this.deletePrepareHandler = deletePrepareHandler;
+        this.deleteCommitHandler = deleteCommitHandler;
     }
 
     @GetMapping("/shard/{id}")
@@ -29,6 +40,18 @@ public class InternalController {
     @PostMapping("/shard")
     public ResponseEntity<Void> giveShard(@RequestBody SecretPartMessage shardData) {
         giveShardService.giveShard(shardData);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/delete/prepare")
+    public ResponseEntity<Void> prepareDelete(@RequestBody DeletePrepareRequest request) {
+        deletePrepareHandler.handle(request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/delete/commit")
+    public ResponseEntity<Void> commitDelete(@RequestBody DeleteCommitRequest request) {
+        deleteCommitHandler.handle(request);
         return ResponseEntity.ok().build();
     }
 }
