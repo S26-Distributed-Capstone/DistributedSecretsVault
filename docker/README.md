@@ -14,6 +14,8 @@ docker/
 ├── redis/
 │   ├── docker-compose.redis.yml                  # Redis only
 │   └── redis.conf                                # Redis persistence and security config
+├── kafka/
+│   └── docker-compose.kafka.yml                  # Kafka only (KRaft mode)
 ├── postgresql/
 │   ├── docker-compose.postgresql.yml             # PostgreSQL only (development, single node)
 │   ├── docker-compose.postgresql-production.yml  # Production: primary + 2 standbys
@@ -98,6 +100,13 @@ See `redis/redis.conf` for full configuration.
 - **Volumes**: Persistent data in `postgres-data` volume
 - **Healthcheck**: `pg_isready` before app starts
 - **Purpose**: User accounts; development uses a single node. For production redundancy, use the production compose (see below).
+
+### `kafka`
+
+- **Image**: apache/kafka:3.7.0
+- **Ports**: 9092
+- **Volumes**: Persistent data in `kafka-data` volume
+- **Purpose**: Message broker for request sequencing. Uses KRaft (ZooKeeper-less) mode.
 
 ### `app`
 
