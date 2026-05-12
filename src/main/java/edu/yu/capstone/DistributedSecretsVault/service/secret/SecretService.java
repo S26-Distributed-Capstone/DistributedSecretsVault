@@ -50,7 +50,7 @@ public class SecretService {
             part.setVersion(version);
             secretPartRepository.savePart(part); // split to the other nodes
         }
-        return buildSecretVersion(key, version);
+        return new SecretVersion(key, version, System.currentTimeMillis());
     }
 
     public SecretVersion updateSecret(SecretKey key, String value) {
@@ -71,7 +71,7 @@ public class SecretService {
                 throw new SecretNotFoundException();
             }
         }
-        return buildSecretVersion(key, version);
+        return new SecretVersion(key, version, System.currentTimeMillis());
     }
 
     public String getSecret(SecretKey key, Long version) {
@@ -118,14 +118,6 @@ public class SecretService {
         if (key == null || key.getName() == null || key.getName().isBlank()) {
             throw new IllegalArgumentException("Secret key is required");
         }
-    }
-
-    private SecretVersion buildSecretVersion(SecretKey key, long version) {
-        SecretVersion secretVersion = new SecretVersion();
-        secretVersion.setKey(key);
-        secretVersion.setVersion(version);
-        secretVersion.setTimestampMillis(System.currentTimeMillis());
-        return secretVersion;
     }
 
     private long resolveVersion(SecretKey key, Long requestedVersion) {

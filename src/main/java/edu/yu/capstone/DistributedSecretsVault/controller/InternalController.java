@@ -3,7 +3,7 @@ package edu.yu.capstone.DistributedSecretsVault.controller;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PostShardService;
 
 import java.util.Map;
 
@@ -16,12 +16,12 @@ import org.springframework.web.bind.annotation.*;
 public class InternalController {
 
     private final GetShardService getShardService;
-    private final GiveShardService giveShardService;
+    private final PostShardService postShardService;
 
     @Autowired
-    public InternalController(GetShardService getShardService, GiveShardService giveShardService) {
+    public InternalController(GetShardService getShardService, PostShardService postShardService) {
         this.getShardService = getShardService;
-        this.giveShardService = giveShardService;
+        this.postShardService = postShardService;
     }
 
     @GetMapping("/shard/{id}")
@@ -38,8 +38,8 @@ public class InternalController {
     }
 
     @PostMapping("/shard")
-    public ResponseEntity<Void> giveShard(@RequestBody SecretPartMessage shardData) {
-        giveShardService.giveShard(shardData);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<String> postShard(@RequestBody SecretPartMessage message,
+            @RequestParam(value = "user") String user) {
+        return postShardService.postShard(message, user);
     }
 }

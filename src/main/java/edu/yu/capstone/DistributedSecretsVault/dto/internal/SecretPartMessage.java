@@ -1,14 +1,17 @@
 package edu.yu.capstone.DistributedSecretsVault.dto.internal;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class SecretPartMessage {
     private SecretKey key;
-    private long version;
-    private int partIndex;
+    private Long version;
     private byte[] shard;
-    private long epoch;
-    private long timestampEpochMillis;
+    private long timestampMillis;
+    private int partIndex;
 }

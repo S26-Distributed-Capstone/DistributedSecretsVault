@@ -54,8 +54,7 @@ public class PutSecretServiceTest {
         request.setSecretCurrentName("secret1");
         request.setSecretUpdatedValue("newVal");
 
-        SecretVersion version = new SecretVersion();
-        version.setVersion(2L);
+        SecretVersion version = new SecretVersion(new SecretKey("user1", "secret1"), 2L, System.currentTimeMillis());
 
         when(secretService.updateSecret(any(SecretKey.class), eq("newVal"))).thenReturn(version);
 

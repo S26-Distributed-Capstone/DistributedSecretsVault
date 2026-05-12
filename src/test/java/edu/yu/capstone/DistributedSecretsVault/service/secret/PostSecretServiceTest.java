@@ -56,8 +56,8 @@ public class PostSecretServiceTest {
         request.setSecretName("secret1");
         request.setSecretValue("value1");
 
-        SecretVersion version = new SecretVersion();
-        version.setVersion(1L);
+        SecretKey key = new SecretKey(request.getUser(), request.getSecretName());
+        SecretVersion version = new SecretVersion(key, 1L, System.currentTimeMillis());
 
         when(secretService.storeSecret(any(SecretKey.class), eq("value1"))).thenReturn(version);
 
