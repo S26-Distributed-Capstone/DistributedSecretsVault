@@ -10,7 +10,8 @@ docker/
 │   ├── docker-compose.dsv.yml                    # App only
 │   ├── docker-compose.dsv-redis.yml              # App + Redis
 │   ├── docker-compose.dsv-postgresql.yml         # App + PostgreSQL
-│   └── docker-compose.dsv-redis-postgresql.yml   # App + Redis + PostgreSQL (full dev stack)
+│   ├── docker-compose.dsv-redis-postgresql.yml   # App + Redis + PostgreSQL + Kafka (single app)
+│   └── docker-compose.dsv-redis-postgresql-3nodes.yml # Same stack, three DSV app instances (Kafka fanout test)
 ├── redis/
 │   ├── docker-compose.redis.yml                  # Redis only
 │   └── redis.conf                                # Redis persistence and security config
@@ -27,7 +28,8 @@ docker/
 
 Project root:
 ├── .env.example                                  # Environment variable template
-└── .env                                          # Your local config (gitignored)
+├── .env                                          # Your local config (gitignored)
+└── scripts/test-three-dsv-kafka-nodes.sh         # Builds, starts 3-node stack, curls temp Kafka endpoint, checks logs
 ```
 
 ## Setup
@@ -61,6 +63,31 @@ Project root:
    - App only: `docker compose -f docker/dsv/docker-compose.dsv.yml up --build`
    - App + Redis: `docker compose -f docker/dsv/docker-compose.dsv-redis.yml up --build`
    - App + PostgreSQL: `docker compose -f docker/dsv/docker-compose.dsv-postgresql.yml up --build`
+
+   **Three DSV instances (Kafka commit fanout):** do not run this at the same time as the single-app stack on the same machine (shared container names `dsv-redis`, `dsv-postgres`, `dsv-kafka`, and host ports). Stop the other stack first (`docker compose … down`).
+
+   ```bash
+   ./mvnw clean package -DskipTests
+   mkdir -p target/dependency && (cd target/dependency && jar -xf ../*.jar)
+   docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql-3nodes.yml up -d --build
+   ```
+
+   Apps listen on **8081**, **8082**, and **8083** (mapped to container port 8080). Each instance sets a different `NODE_NAME` so Kafka consumer groups differ and every node receives `secrets-commit` messages.
+
+   Automated check (build, start, publish once from app1, assert all three containers logged the commit):
+
+   ```bash
+   ./scripts/test-three-dsv-kafka-nodes.sh
+   ```
+
+   Manual check after the stack is healthy (prefer **`127.0.0.1`** on WSL2 / Docker Desktop if `localhost` gives `Connection reset by peer`):
+
+   ```bash
+   curl -sS http://127.0.0.1:8081/api/temp-test/kafka
+   docker logs dsv-app-1 2>&1 | grep -i "Received commit" | tail -3
+   docker logs dsv-app-2 2>&1 | grep -i "Received commit" | tail -3
+   docker logs dsv-app-3 2>&1 | grep -i "Received commit" | tail -3
+   ```
 
 ## Environment Variables
 

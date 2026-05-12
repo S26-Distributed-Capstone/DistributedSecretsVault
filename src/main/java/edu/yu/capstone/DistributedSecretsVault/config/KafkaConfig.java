@@ -28,9 +28,4 @@ public class KafkaConfig {
                 .config("retention.ms", "14400000") // 4 hours retention
                 .build();
     }
-
-    @Bean
-    public org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate(org.springframework.kafka.core.ProducerFactory<String, Object> producerFactory) {
-        return new org.springframework.kafka.core.KafkaTemplate<>(producerFactory);
-    }
 }
