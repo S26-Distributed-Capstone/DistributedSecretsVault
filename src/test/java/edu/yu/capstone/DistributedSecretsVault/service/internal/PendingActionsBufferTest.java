@@ -72,7 +72,7 @@ public class PendingActionsBufferTest {
         UUID opC = UUID.randomUUID();
 
         buffer.bufferAction(opA, key1, ActionType.DELETE);
-        buffer.bufferAction(opB, key2, ActionType.UPDATE);
+        buffer.bufferAction(opB, key2, ActionType.PUT);
         buffer.bufferAction(opC, key3, ActionType.DELETE);
 
         assertTrue(buffer.contains(opA));
@@ -94,7 +94,7 @@ public class PendingActionsBufferTest {
         UUID op3 = UUID.randomUUID();
 
         buffer.bufferAction(op1, sameKey, ActionType.DELETE);
-        buffer.bufferAction(op2, sameKey, ActionType.UPDATE);
+        buffer.bufferAction(op2, sameKey, ActionType.PUT);
         buffer.bufferAction(op3, sameKey, ActionType.DELETE);
 
         assertTrue(buffer.contains(op1));
@@ -138,7 +138,7 @@ public class PendingActionsBufferTest {
         UUID opUpd = UUID.randomUUID();
 
         buffer.bufferAction(opDel, key, ActionType.DELETE);
-        buffer.bufferAction(opUpd, key, ActionType.UPDATE);
+        buffer.bufferAction(opUpd, key, ActionType.PUT);
 
         PendingAction del = buffer.commitAndRemove(opDel);
         assertNotNull(del);
@@ -200,7 +200,7 @@ public class PendingActionsBufferTest {
 
         SecretKey key = new SecretKey("user1", "secret1");
         shortBuffer.bufferAction(UUID.randomUUID(), key, ActionType.DELETE);
-        shortBuffer.bufferAction(UUID.randomUUID(), key, ActionType.UPDATE);
+        shortBuffer.bufferAction(UUID.randomUUID(), key, ActionType.PUT);
         assertTrue(shortBuffer.containsKey(key));
 
         Thread.sleep(100);

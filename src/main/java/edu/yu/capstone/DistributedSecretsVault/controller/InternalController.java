@@ -4,11 +4,13 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 
 import java.util.Map;
 import java.util.UUID;
@@ -21,16 +23,19 @@ import org.springframework.web.bind.annotation.*;
 public class InternalController {
 
     private final GetShardService getShardService;
-    private final GiveShardService giveShardService;
+    private final PostPrepareHandler postPrepareHandler;
+    private final PostCommitHandler postCommitHandler;
     private final DeletePrepareHandler deletePrepareHandler;
     private final DeleteCommitHandler deleteCommitHandler;
 
     public InternalController(GetShardService getShardService,
-            GiveShardService giveShardService,
+            PostPrepareHandler postPrepareHandler,
+            PostCommitHandler postCommitHandler,
             DeletePrepareHandler deletePrepareHandler,
             DeleteCommitHandler deleteCommitHandler) {
         this.getShardService = getShardService;
-        this.giveShardService = giveShardService;
+        this.postPrepareHandler = postPrepareHandler;
+        this.postCommitHandler = postCommitHandler;
         this.deletePrepareHandler = deletePrepareHandler;
         this.deleteCommitHandler = deleteCommitHandler;
     }
@@ -48,10 +53,16 @@ public class InternalController {
         return getShardService.getAllVersions(user, id);
     }
 
-    @PostMapping("/shard")
-    public ResponseEntity<Void> giveShard(@RequestBody SecretPartMessage shardData) {
-        giveShardService.giveShard(shardData);
-        return ResponseEntity.ok().build();
+    @PostMapping("/prepare")
+    public ResponseEntity<Void> preparePost(@RequestBody PostPrepareRequest request) {
+        postPrepareHandler.handle(request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/commit")
+    public ResponseEntity<Void> commitPost(@RequestBody PostCommitRequest request) {
+        postCommitHandler.handle(request);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/prepare")

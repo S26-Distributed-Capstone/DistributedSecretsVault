@@ -5,7 +5,8 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +33,10 @@ public class InternalControllerDeleteTest {
     private GetShardService getShardService;
 
     @MockitoBean
-    private GiveShardService giveShardService;
+    private PostPrepareHandler postPrepareHandler;
+
+    @MockitoBean
+    private PostCommitHandler postCommitHandler;
 
     @MockitoBean
     private DeletePrepareHandler deletePrepareHandler;

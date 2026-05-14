@@ -14,6 +14,8 @@ import org.springframework.web.client.RestClientResponseException;
 
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import io.scalecube.services.Microservices;
 
 /**
@@ -107,6 +109,42 @@ public class NodeClient {
             return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
         } catch (Exception ex) {
             log.warn("Failed to send delete commit to {}: {}", peerUrl, ex.getMessage());
+            return PeerResponse.failed(peerUrl, ex.getMessage());
+        }
+    }
+
+    public PeerResponse sendPostPrepare(String peerUrl, PostPrepareRequest request) {
+        try {
+            restClient.post()
+                    .uri(peerUrl + "/internal/prepare")
+                    .body(request)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Post prepare ACK received from {}", peerUrl);
+            return PeerResponse.acknowledged(peerUrl);
+        } catch (RestClientResponseException ex) {
+            log.warn("Post prepare rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.warn("Failed to send post prepare to {}: {}", peerUrl, ex.getMessage());
+            return PeerResponse.failed(peerUrl, ex.getMessage());
+        }
+    }
+
+    public PeerResponse sendPostCommit(String peerUrl, PostCommitRequest request) {
+        try {
+            restClient.post()
+                    .uri(peerUrl + "/internal/commit")
+                    .body(request)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Post commit ACK received from {}", peerUrl);
+            return PeerResponse.acknowledged(peerUrl);
+        } catch (RestClientResponseException ex) {
+            log.warn("Post commit rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.warn("Failed to send post commit to {}: {}", peerUrl, ex.getMessage());
             return PeerResponse.failed(peerUrl, ex.getMessage());
         }
     }
