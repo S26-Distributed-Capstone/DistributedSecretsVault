@@ -3,7 +3,7 @@ package edu.yu.capstone.DistributedSecretsVault.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Tag;
@@ -14,7 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
@@ -22,7 +22,7 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.PutPrepareHandle
 
 @WebMvcTest(InternalController.class)
 @Tag("slice")
-public class InternalControllerPostTest {
+public class InternalControllerPutTest {
     @Autowired
     private MockMvc mockMvc;
 
@@ -39,10 +39,10 @@ public class InternalControllerPostTest {
     private DeletePrepareHandler deletePrepareHandler;
 
     @Test
-    void testPreparePostReturnsNoContent() throws Exception {
-        doNothing().when(postPrepareHandler).handle(any(PostPrepareRequest.class));
+    void testPreparePutReturnsNoContent() throws Exception {
+        doNothing().when(putPrepareHandler).handle(any(PutPrepareRequest.class));
 
-        mockMvc.perform(post("/internal/prepare")
+        mockMvc.perform(put("/internal/prepare")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {
@@ -50,7 +50,7 @@ public class InternalControllerPostTest {
                           "operationId": "11111111-1111-1111-1111-111111111111",
                           "secretPartMessage": {
                             "key": {"ownerId": "user1", "name": "secret1"},
-                            "version": 1,
+                            "version": 2,
                             "shard": "AQID",
                             "timestampMillis": 1,
                             "partIndex": 1
@@ -59,7 +59,6 @@ public class InternalControllerPostTest {
                         """))
                 .andExpect(status().isNoContent());
 
-        verify(postPrepareHandler).handle(any(PostPrepareRequest.class));
+        verify(putPrepareHandler).handle(any(PutPrepareRequest.class));
     }
-
 }

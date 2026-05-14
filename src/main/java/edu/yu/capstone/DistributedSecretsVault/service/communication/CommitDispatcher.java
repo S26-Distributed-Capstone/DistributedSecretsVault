@@ -7,10 +7,12 @@ import org.springframework.stereotype.Service;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.CommitMessage;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InternalOperationConflictException;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.ActionType;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PutCommitHandler;
 
 @Service
 public class CommitDispatcher {
@@ -18,11 +20,14 @@ public class CommitDispatcher {
 
     private final DeleteCommitHandler deleteCommitHandler;
     private final PostCommitHandler postCommitHandler;
+    private final PutCommitHandler putCommitHandler;
 
     public CommitDispatcher(DeleteCommitHandler deleteCommitHandler,
-            PostCommitHandler postCommitHandler) {
+            PostCommitHandler postCommitHandler,
+            PutCommitHandler putCommitHandler) {
         this.deleteCommitHandler = deleteCommitHandler;
         this.postCommitHandler = postCommitHandler;
+        this.putCommitHandler = putCommitHandler;
     }
 
     public void dispatch(CommitMessage message) {
@@ -32,6 +37,8 @@ public class CommitDispatcher {
                 deleteCommitHandler.handle(new DeleteCommitRequest(message.getOperationId(), message.getSecretKey()));
             } else if (message.getActionType() == ActionType.POST) {
                 postCommitHandler.handle(new PostCommitRequest(message.getOperationId(), message.getSecretKey()));
+            } else if (message.getActionType() == ActionType.PUT) {
+                putCommitHandler.handle(new PutCommitRequest(message.getOperationId(), message.getSecretKey()));
             } else {
                 log.warn("Ignoring unsupported commit action type: operationId={}, actionType={}",
                         message.getOperationId(), message.getActionType());

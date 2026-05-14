@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutPrepareRequest;
 import io.scalecube.services.Microservices;
 
 /**
@@ -97,6 +98,24 @@ public class NodeClient {
             return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
         } catch (Exception ex) {
             log.warn("Failed to send post prepare to {}: {}", peerUrl, ex.getMessage());
+            return PeerResponse.failed(peerUrl, ex.getMessage());
+        }
+    }
+
+    public PeerResponse sendPutPrepare(String peerUrl, PutPrepareRequest request) {
+        try {
+            restClient.put()
+                    .uri(peerUrl + "/internal/prepare")
+                    .body(request)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Put prepare ACK received from {}", peerUrl);
+            return PeerResponse.acknowledged(peerUrl);
+        } catch (RestClientResponseException ex) {
+            log.warn("Put prepare rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.warn("Failed to send put prepare to {}: {}", peerUrl, ex.getMessage());
             return PeerResponse.failed(peerUrl, ex.getMessage());
         }
     }
