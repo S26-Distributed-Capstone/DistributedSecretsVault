@@ -8,7 +8,7 @@ import edu.yu.capstone.DistributedSecretsVault.dto.secret.DeleteSecretRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalDeleteService;
 
 @Service
-public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, String> {
+public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, Void> {
     private final InternalDeleteService internalDeleteService;
 
     public DeleteSecretService(InternalDeleteService internalDeleteService) {
@@ -16,7 +16,7 @@ public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, S
     }
 
     @Override
-    public ResponseEntity<String> execute(DeleteSecretRequest input) {
+    public ResponseEntity<Void> execute(DeleteSecretRequest input) {
         if (input == null) {
             throw new IllegalArgumentException("Request is required");
         }
@@ -25,6 +25,6 @@ public class DeleteSecretService implements SecretCommand<DeleteSecretRequest, S
         }
         SecretKey key = new SecretKey(input.getUser(), input.getDeleteName());
         internalDeleteService.deleteAcrossCluster(key);
-        return ResponseEntity.ok("Delete operation completed successfully.");
+        return ResponseEntity.noContent().build();
     }
 }

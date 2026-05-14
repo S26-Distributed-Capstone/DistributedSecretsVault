@@ -55,7 +55,7 @@ public class InternalController {
         return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/delete/prepare")
+    @DeleteMapping("/prepare")
     public ResponseEntity<Void> prepareDelete(
             @RequestParam("originatorNodeId") String originatorNodeId,
             @RequestParam("operationId") String operationId,
@@ -67,7 +67,7 @@ public class InternalController {
         return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/delete/commit")
+    @DeleteMapping("/commit")
     public ResponseEntity<Void> commitDelete(
             @RequestParam("operationId") String operationId,
             @RequestParam("secretKeyOwnerId") String secretKeyOwnerId,

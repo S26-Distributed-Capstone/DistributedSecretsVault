@@ -6,9 +6,9 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
@@ -57,13 +57,13 @@ public class NodeClient {
      *
      * @param peerUrl base URL of the peer (e.g. {@code http://10.0.0.2:8080})
      * @param request the prepare request
-     * @return {@code true} if the peer acknowledged successfully
+     * @return peer response details, including status/error data when not acknowledged
      */
-    public boolean sendDeletePrepare(String peerUrl, DeletePrepareRequest request) {
+    public PeerResponse sendDeletePrepare(String peerUrl, DeletePrepareRequest request) {
         try {
             restClient.delete()
                     .uri(peerUrl
-                            + "/internal/delete/prepare?originatorNodeId={orig}&operationId={opId}&secretKeyOwnerId={owner}&secretKeyName={name}",
+                            + "/internal/prepare?originatorNodeId={orig}&operationId={opId}&secretKeyOwnerId={owner}&secretKeyName={name}",
                             request.getOriginatorNodeId(),
                             request.getOperationId(),
                             request.getSecretKey().getOwnerId(),
@@ -71,10 +71,13 @@ public class NodeClient {
                     .retrieve()
                     .toBodilessEntity();
             log.debug("Prepare ACK received from {}", peerUrl);
-            return true;
+            return PeerResponse.acknowledged(peerUrl);
+        } catch (RestClientResponseException ex) {
+            log.warn("Delete prepare rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
         } catch (Exception ex) {
             log.warn("Failed to send delete prepare to {}: {}", peerUrl, ex.getMessage());
-            return false;
+            return PeerResponse.failed(peerUrl, ex.getMessage());
         }
     }
 
@@ -83,23 +86,26 @@ public class NodeClient {
      *
      * @param peerUrl base URL of the peer
      * @param request the commit request
-     * @return {@code true} if the peer acknowledged successfully
+     * @return peer response details, including status/error data when not acknowledged
      */
-    public boolean sendDeleteCommit(String peerUrl, DeleteCommitRequest request) {
+    public PeerResponse sendDeleteCommit(String peerUrl, DeleteCommitRequest request) {
         try {
             restClient.delete()
                     .uri(peerUrl
-                            + "/internal/delete/commit?operationId={opId}&secretKeyOwnerId={owner}&secretKeyName={name}",
+                            + "/internal/commit?operationId={opId}&secretKeyOwnerId={owner}&secretKeyName={name}",
                             request.getOperationId(),
                             request.getSecretKey().getOwnerId(),
                             request.getSecretKey().getName())
                     .retrieve()
                     .toBodilessEntity();
             log.debug("Commit ACK received from {}", peerUrl);
-            return true;
+            return PeerResponse.acknowledged(peerUrl);
+        } catch (RestClientResponseException ex) {
+            log.warn("Delete commit rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
         } catch (Exception ex) {
             log.warn("Failed to send delete commit to {}: {}", peerUrl, ex.getMessage());
-            return false;
+            return PeerResponse.failed(peerUrl, ex.getMessage());
         }
     }
 
@@ -159,5 +165,19 @@ public class NodeClient {
             value = System.getProperty(key);
         }
         return value;
+    }
+
+    public record PeerResponse(String peerUrl, boolean acknowledged, Integer statusCode, String errorMessage) {
+        public static PeerResponse acknowledged(String peerUrl) {
+            return new PeerResponse(peerUrl, true, null, null);
+        }
+
+        public static PeerResponse rejected(String peerUrl, int statusCode, String errorMessage) {
+            return new PeerResponse(peerUrl, false, statusCode, errorMessage);
+        }
+
+        public static PeerResponse failed(String peerUrl, String errorMessage) {
+            return new PeerResponse(peerUrl, false, null, errorMessage);
+        }
     }
 }

@@ -2,6 +2,7 @@ package edu.yu.capstone.DistributedSecretsVault.service.internal;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.exceptions.InternalOperationConflictException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PendingActionsBuffer.PendingAction;
 import org.junit.jupiter.api.Tag;
@@ -58,25 +59,39 @@ public class DeleteCommitHandlerTest {
     }
 
     @Test
-    void testHandleStillDeletesWhenBufferEntryMissing() {
+    void testHandleThrowsWhenBufferEntryMissing() {
         SecretKey key = new SecretKey("user1", "secret1");
 
         when(pendingActionsBuffer.commitAndRemove("op-3")).thenReturn(null);
-        when(secretPartRepository.exists(key)).thenReturn(true);
 
-        handler.handle(new DeleteCommitRequest("op-3", key));
+        assertThrows(InternalOperationConflictException.class,
+                () -> handler.handle(new DeleteCommitRequest("op-3", key)));
 
-        verify(secretPartRepository).deleteParts(key);
+        verify(secretPartRepository, never()).deleteParts(any());
     }
 
     @Test
-    void testHandleNoOpWhenBufferMissingAndNoShard() {
+    void testHandleThrowsWhenBufferMissingAndNoShard() {
         SecretKey key = new SecretKey("user1", "secret1");
 
         when(pendingActionsBuffer.commitAndRemove("op-4")).thenReturn(null);
-        when(secretPartRepository.exists(key)).thenReturn(false);
 
-        handler.handle(new DeleteCommitRequest("op-4", key));
+        assertThrows(InternalOperationConflictException.class,
+                () -> handler.handle(new DeleteCommitRequest("op-4", key)));
+
+        verify(secretPartRepository, never()).deleteParts(any());
+    }
+
+    @Test
+    void testHandleThrowsWhenCommitKeyDiffersFromBufferedKey() {
+        SecretKey bufferedKey = new SecretKey("user1", "secret1");
+        SecretKey commitKey = new SecretKey("user1", "secret2");
+        PendingAction buffered = new PendingAction("op-6", bufferedKey, ActionType.DELETE, Instant.now());
+
+        when(pendingActionsBuffer.commitAndRemove("op-6")).thenReturn(buffered);
+
+        assertThrows(InternalOperationConflictException.class,
+                () -> handler.handle(new DeleteCommitRequest("op-6", commitKey)));
 
         verify(secretPartRepository, never()).deleteParts(any());
     }

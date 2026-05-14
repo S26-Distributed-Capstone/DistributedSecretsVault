@@ -79,6 +79,13 @@ public class GlobalExceptionHandler {
         return new ErrorResponse(e.getMessage());
     }
 
+    @ExceptionHandler(InternalOperationConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    @ResponseBody
+    public ErrorResponse handleInternalOperationConflictException(InternalOperationConflictException e) {
+        return new ErrorResponse(e.getMessage());
+    }
+
     // ── 500 Internal Server Error ────────────────────────────────────────
     // retrieve.md §12 – shard integrity / reconstruction failure
 

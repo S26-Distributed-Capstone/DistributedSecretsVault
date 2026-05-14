@@ -7,6 +7,7 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest
 import edu.yu.capstone.DistributedSecretsVault.exceptions.QuorumNotReachedException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.PeerResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -73,8 +74,10 @@ public class InternalDeleteServiceTest {
         SecretKey key = createKey("user1", "secret1");
         when(secretPartRepository.exists(key)).thenReturn(true);
         when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
-        when(nodeClient.sendDeletePrepare(anyString(), any(DeletePrepareRequest.class))).thenReturn(true);
-        when(nodeClient.sendDeleteCommit(anyString(), any(DeleteCommitRequest.class))).thenReturn(true);
+        when(nodeClient.sendDeletePrepare(anyString(), any(DeletePrepareRequest.class)))
+                .thenAnswer(invocation -> PeerResponse.acknowledged(invocation.getArgument(0)));
+        when(nodeClient.sendDeleteCommit(anyString(), any(DeleteCommitRequest.class)))
+                .thenAnswer(invocation -> PeerResponse.acknowledged(invocation.getArgument(0)));
 
         assertDoesNotThrow(() -> service.deleteAcrossCluster(key));
 
@@ -93,9 +96,12 @@ public class InternalDeleteServiceTest {
         when(secretPartRepository.exists(key)).thenReturn(true);
         when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
         // Only one peer ACKs, but that's enough (1 self + 1 peer = 2 >= required 2)
-        when(nodeClient.sendDeletePrepare(eq("http://peer1:8080"), any())).thenReturn(true);
-        when(nodeClient.sendDeletePrepare(eq("http://peer2:8080"), any())).thenReturn(false);
-        when(nodeClient.sendDeleteCommit(anyString(), any())).thenReturn(true);
+        when(nodeClient.sendDeletePrepare(eq("http://peer1:8080"), any()))
+                .thenReturn(PeerResponse.acknowledged("http://peer1:8080"));
+        when(nodeClient.sendDeletePrepare(eq("http://peer2:8080"), any()))
+                .thenReturn(PeerResponse.failed("http://peer2:8080", "timeout"));
+        when(nodeClient.sendDeleteCommit(anyString(), any()))
+                .thenAnswer(invocation -> PeerResponse.acknowledged(invocation.getArgument(0)));
 
         assertDoesNotThrow(() -> service.deleteAcrossCluster(key));
 
@@ -121,7 +127,8 @@ public class InternalDeleteServiceTest {
         SecretKey key = createKey("user1", "secret1");
         when(secretPartRepository.exists(key)).thenReturn(true);
         when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
-        when(nodeClient.sendDeletePrepare(anyString(), any())).thenReturn(false);
+        when(nodeClient.sendDeletePrepare(anyString(), any()))
+                .thenAnswer(invocation -> PeerResponse.failed(invocation.getArgument(0), "timeout"));
 
         assertThrows(QuorumNotReachedException.class, () -> service.deleteAcrossCluster(key));
 
@@ -139,7 +146,8 @@ public class InternalDeleteServiceTest {
         SecretKey key = createKey("user1", "secret1");
         when(secretPartRepository.exists(key)).thenReturn(true);
         when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
-        when(nodeClient.sendDeletePrepare(anyString(), any())).thenReturn(false);
+        when(nodeClient.sendDeletePrepare(anyString(), any()))
+                .thenAnswer(invocation -> PeerResponse.failed(invocation.getArgument(0), "timeout"));
 
         assertThrows(QuorumNotReachedException.class, () -> service.deleteAcrossCluster(key));
     }
@@ -152,8 +160,10 @@ public class InternalDeleteServiceTest {
         SecretKey key = createKey("user1", "secret1");
         when(secretPartRepository.exists(key)).thenReturn(true);
         when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
-        when(nodeClient.sendDeletePrepare(anyString(), any())).thenReturn(true);
-        when(nodeClient.sendDeleteCommit(anyString(), any())).thenReturn(false);
+        when(nodeClient.sendDeletePrepare(anyString(), any()))
+                .thenAnswer(invocation -> PeerResponse.acknowledged(invocation.getArgument(0)));
+        when(nodeClient.sendDeleteCommit(anyString(), any()))
+                .thenAnswer(invocation -> PeerResponse.failed(invocation.getArgument(0), "timeout"));
 
         assertDoesNotThrow(() -> service.deleteAcrossCluster(key));
 

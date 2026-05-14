@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.exceptions.InternalOperationConflictException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PendingActionsBuffer.PendingAction;
 
@@ -49,19 +50,22 @@ public class DeleteCommitHandler {
         PendingAction committed = pendingActionsBuffer.commitAndRemove(request.getOperationId());
 
         if (committed == null) {
-            log.warn("Commit received for unknown/expired operationId={}, "
-                    + "attempting delete anyway for secretKey={}",
-                    request.getOperationId(), request.getSecretKey());
+            log.warn("Commit received for unknown or expired operationId={}",
+                    request.getOperationId());
+            throw new InternalOperationConflictException(
+                    "No staged operation found for commit: " + request.getOperationId());
         }
 
-        // Use the secret key from the commit request (authoritative).
+        if (!committed.secretKey().equals(request.getSecretKey())) {
+            throw new InternalOperationConflictException(
+                    "Commit secret key does not match staged operation: " + request.getOperationId());
+        }
+
         if (secretPartRepository.exists(request.getSecretKey())) {
             secretPartRepository.deleteParts(request.getSecretKey());
-            log.info("Delete committed: operationId={}, secretKey={}",
-                    request.getOperationId(), request.getSecretKey());
+            log.debug("Delete committed: operationId={}", request.getOperationId());
         } else {
-            log.debug("No local shard to delete for operationId={}, secretKey={}",
-                    request.getOperationId(), request.getSecretKey());
+            log.debug("No local shard to delete for operationId={}", request.getOperationId());
         }
     }
 

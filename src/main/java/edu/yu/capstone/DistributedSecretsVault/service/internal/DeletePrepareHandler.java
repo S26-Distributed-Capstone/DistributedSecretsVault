@@ -43,8 +43,8 @@ public class DeletePrepareHandler {
 
         boolean exists = secretPartRepository.exists(request.getSecretKey());
         if (!exists) {
-            log.warn("Delete prepare received for non-existent secret: operationId={}, secretKey={}",
-                    request.getOperationId(), request.getSecretKey());
+            log.warn("Delete prepare received for non-existent local shard: operationId={}",
+                    request.getOperationId());
             throw new SecretNotFoundException("Secret not found: " + request.getSecretKey());
         }
         pendingActionsBuffer.bufferAction(

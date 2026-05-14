@@ -58,7 +58,7 @@ public class SecretController {
     }
 
     @DeleteMapping
-    public ResponseEntity<String> deleteSecret(@RequestBody DeleteSecretRequest request) {
+    public ResponseEntity<Void> deleteSecret(@RequestBody DeleteSecretRequest request) {
         return deleteSecretService.execute(request);
     }
 

@@ -51,10 +51,9 @@ public class DeleteSecretServiceTest {
         request.setUser("user1");
         request.setDeleteName("secret1");
 
-        ResponseEntity<String> response = deleteSecretService.execute(request);
+        ResponseEntity<Void> response = deleteSecretService.execute(request);
 
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("Delete operation completed successfully.", response.getBody());
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
         verify(internalDeleteService).deleteAcrossCluster(any(SecretKey.class));
     }
 }

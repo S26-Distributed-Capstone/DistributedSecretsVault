@@ -43,7 +43,7 @@ public class InternalControllerDeleteTest {
     void testPrepareDeleteReturnsOk() throws Exception {
         doNothing().when(deletePrepareHandler).handle(any(DeletePrepareRequest.class));
 
-        mockMvc.perform(delete("/internal/delete/prepare")
+        mockMvc.perform(delete("/internal/prepare")
                 .param("originatorNodeId", "node-1")
                 .param("operationId", "op-123")
                 .param("secretKeyOwnerId", "user1")
@@ -57,7 +57,7 @@ public class InternalControllerDeleteTest {
     void testCommitDeleteReturnsOk() throws Exception {
         doNothing().when(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
 
-        mockMvc.perform(delete("/internal/delete/commit")
+        mockMvc.perform(delete("/internal/commit")
                 .param("operationId", "op-123")
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
@@ -71,7 +71,7 @@ public class InternalControllerDeleteTest {
         doThrow(new IllegalArgumentException("Operation ID is required"))
                 .when(deletePrepareHandler).handle(any(DeletePrepareRequest.class));
 
-        mockMvc.perform(delete("/internal/delete/prepare")
+        mockMvc.perform(delete("/internal/prepare")
                 .param("originatorNodeId", "node-1")
                 .param("operationId", "")
                 .param("secretKeyOwnerId", "user1")
@@ -84,7 +84,7 @@ public class InternalControllerDeleteTest {
         doThrow(new IllegalArgumentException("Secret key is required"))
                 .when(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
 
-        mockMvc.perform(delete("/internal/delete/commit")
+        mockMvc.perform(delete("/internal/commit")
                 .param("operationId", "op-123")
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
@@ -94,7 +94,7 @@ public class InternalControllerDeleteTest {
     @Test
     void testPrepareDeleteReturnsBadRequestWhenParamsMissing() throws Exception {
         // Missing required query params should return 400
-        mockMvc.perform(delete("/internal/delete/prepare")
+        mockMvc.perform(delete("/internal/prepare")
                 .param("originatorNodeId", "node-1"))
                 .andExpect(status().isBadRequest());
     }
@@ -102,7 +102,7 @@ public class InternalControllerDeleteTest {
     @Test
     void testCommitDeleteReturnsBadRequestWhenParamsMissing() throws Exception {
         // Missing required query params should return 400
-        mockMvc.perform(delete("/internal/delete/commit")
+        mockMvc.perform(delete("/internal/commit")
                 .param("operationId", "op-123"))
                 .andExpect(status().isBadRequest());
     }

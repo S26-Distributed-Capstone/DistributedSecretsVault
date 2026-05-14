@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +44,7 @@ public class PendingActionsBuffer {
     /** Secondary index: SecretKey → set of operationIds affecting that key. */
     private final Map<SecretKey, Set<String>> bySecretKey = new ConcurrentHashMap<>();
 
+    private final Map<SecretKey, KeyLock> locksBySecretKey = new ConcurrentHashMap<>();
     private final long evictionTimeoutMillis;
 
     public PendingActionsBuffer(ClusterConfig clusterConfig) {
@@ -58,9 +61,14 @@ public class PendingActionsBuffer {
      */
     public void bufferAction(String operationId, SecretKey secretKey, ActionType actionType) {
         PendingAction entry = new PendingAction(operationId, secretKey, actionType, Instant.now());
-        byOperationId.put(operationId, entry);
-        bySecretKey.computeIfAbsent(secretKey, k -> ConcurrentHashMap.newKeySet())
-                .add(operationId);
+        KeyLock keyLock = acquireLock(secretKey);
+        try {
+            byOperationId.put(operationId, entry);
+            bySecretKey.computeIfAbsent(secretKey, k -> ConcurrentHashMap.newKeySet())
+                    .add(operationId);
+        } finally {
+            releaseLock(secretKey, keyLock);
+        }
         log.debug("Buffered pending action: operationId={}, secretKey={}, type={}",
                 operationId, secretKey, actionType);
     }
@@ -77,46 +85,71 @@ public class PendingActionsBuffer {
      * @return the pending action, or {@code null} if not found / already evicted
      */
     public PendingAction commitAndRemove(String operationId) {
-        PendingAction committed = byOperationId.remove(operationId);
-        if (committed == null) {
-            log.warn("No pending action found for operationId={}", operationId);
+        PendingAction candidate = byOperationId.get(operationId);
+        if (candidate == null) {
+            log.debug("No pending action found for operationId={}", operationId);
             return null;
         }
 
-        // Remove all other pending actions for the same secret key
-        SecretKey key = committed.secretKey();
-        Set<String> relatedOps = bySecretKey.remove(key);
-        if (relatedOps != null) {
-            for (String relatedOpId : relatedOps) {
-                if (!relatedOpId.equals(operationId)) {
-                    PendingAction evicted = byOperationId.remove(relatedOpId);
-                    if (evicted != null) {
-                        log.info("Evicted conflicting action: operationId={}, type={}, "
-                                + "superseded by committed operationId={}",
-                                relatedOpId, evicted.actionType(), operationId);
+        KeyLock keyLock = acquireLock(candidate.secretKey());
+        try {
+            PendingAction committed = byOperationId.remove(operationId);
+            if (committed == null) {
+                log.debug("No pending action found for operationId={}", operationId);
+                return null;
+            }
+
+            // Remove all other pending actions for the same secret key
+            SecretKey key = committed.secretKey();
+            Set<String> relatedOps = bySecretKey.remove(key);
+            if (relatedOps != null) {
+                for (String relatedOpId : relatedOps) {
+                    if (!relatedOpId.equals(operationId)) {
+                        PendingAction evicted = byOperationId.remove(relatedOpId);
+                        if (evicted != null) {
+                            log.debug("Evicted conflicting action: operationId={}, type={}, "
+                                    + "superseded by committed operationId={}",
+                                    relatedOpId, evicted.actionType(), operationId);
+                        }
                     }
                 }
             }
-        }
 
-        log.debug("Committed and removed action: operationId={}, type={}",
-                operationId, committed.actionType());
-        return committed;
+            log.debug("Committed and removed action: operationId={}, type={}",
+                    operationId, committed.actionType());
+            return committed;
+        } finally {
+            releaseLock(candidate.secretKey(), keyLock);
+        }
     }
 
     /**
      * Check whether an action is currently buffered for the given operation ID.
      */
     public boolean contains(String operationId) {
-        return byOperationId.containsKey(operationId);
+        PendingAction action = byOperationId.get(operationId);
+        if (action == null) {
+            return false;
+        }
+        KeyLock keyLock = acquireLock(action.secretKey());
+        try {
+            return byOperationId.containsKey(operationId);
+        } finally {
+            releaseLock(action.secretKey(), keyLock);
+        }
     }
 
     /**
      * Check whether any action is currently buffered for the given secret key.
      */
     public boolean containsKey(SecretKey secretKey) {
-        Set<String> ops = bySecretKey.get(secretKey);
-        return ops != null && !ops.isEmpty();
+        KeyLock keyLock = acquireLock(secretKey);
+        try {
+            Set<String> ops = bySecretKey.get(secretKey);
+            return ops != null && !ops.isEmpty();
+        } finally {
+            releaseLock(secretKey, keyLock);
+        }
     }
 
     /**
@@ -126,28 +159,88 @@ public class PendingActionsBuffer {
     @Scheduled(fixedRate = 10_000)
     public void evictExpired() {
         Instant cutoff = Instant.now().minusMillis(evictionTimeoutMillis);
-        List<String> expired = new ArrayList<>();
+        List<PendingAction> candidates = new ArrayList<>();
 
         Iterator<Map.Entry<String, PendingAction>> it = byOperationId.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, PendingAction> entry = it.next();
             if (entry.getValue().bufferedAt().isBefore(cutoff)) {
-                it.remove();
-                expired.add(entry.getKey());
+                candidates.add(entry.getValue());
+            }
+        }
 
-                // Clean up secondary index
-                SecretKey key = entry.getValue().secretKey();
-                Set<String> ops = bySecretKey.get(key);
-                if (ops != null) {
-                    ops.remove(entry.getKey());
-                    if (ops.isEmpty()) {
-                        bySecretKey.remove(key);
-                    }
+        for (PendingAction candidate : candidates) {
+            KeyLock keyLock = acquireLock(candidate.secretKey());
+            try {
+                PendingAction current = byOperationId.get(candidate.operationId());
+                if (current == null || !current.bufferedAt().isBefore(cutoff)) {
+                    continue;
                 }
 
-                log.info("Evicted expired pending action: operationId={}, type={}",
-                        entry.getKey(), entry.getValue().actionType());
+                byOperationId.remove(current.operationId());
+                removeFromSecretKeyIndex(current.secretKey(), current.operationId());
+
+                log.debug("Evicted expired pending action: operationId={}, type={}",
+                        current.operationId(), current.actionType());
+            } finally {
+                releaseLock(candidate.secretKey(), keyLock);
             }
+        }
+    }
+
+    private void removeFromSecretKeyIndex(SecretKey key, String operationId) {
+        Set<String> ops = bySecretKey.get(key);
+        if (ops != null) {
+            ops.remove(operationId);
+            if (ops.isEmpty()) {
+                bySecretKey.remove(key, ops);
+            }
+        }
+    }
+
+    private KeyLock acquireLock(SecretKey key) {
+        KeyLock keyLock = locksBySecretKey.compute(key, (ignored, existing) -> {
+            if (existing == null) {
+                return new KeyLock();
+            }
+            existing.retain();
+            return existing;
+        });
+        keyLock.lock();
+        return keyLock;
+    }
+
+    private void releaseLock(SecretKey key, KeyLock keyLock) {
+        try {
+            keyLock.unlock();
+        } finally {
+            locksBySecretKey.computeIfPresent(key, (ignored, existing) -> {
+                if (existing != keyLock) {
+                    return existing;
+                }
+                return existing.release() == 0 ? null : existing;
+            });
+        }
+    }
+
+    private static final class KeyLock {
+        private final ReentrantLock lock = new ReentrantLock();
+        private final AtomicInteger references = new AtomicInteger(1);
+
+        void retain() {
+            references.incrementAndGet();
+        }
+
+        int release() {
+            return references.decrementAndGet();
+        }
+
+        void lock() {
+            lock.lock();
+        }
+
+        void unlock() {
+            lock.unlock();
         }
     }
 

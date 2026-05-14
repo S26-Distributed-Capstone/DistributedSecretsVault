@@ -14,6 +14,7 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest
 import edu.yu.capstone.DistributedSecretsVault.exceptions.QuorumNotReachedException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.PeerResponse;
 
 /**
  * Orchestrates the distributed delete protocol across the cluster.
@@ -68,7 +69,7 @@ public class InternalDeleteService {
         }
 
         String operationId = UUID.randomUUID().toString();
-        log.info("Starting distributed delete: operationId={}, secretKey={}", operationId, key);
+        log.info("Starting distributed delete: operationId={}", operationId);
 
         // Phase 1: Prepare — broadcast to peers
         List<String> peerUrls = nodeClient.resolvePeerUrls();
@@ -83,7 +84,7 @@ public class InternalDeleteService {
 
         // Phase 2: Check threshold
         if (totalAcks < requiredAcks) {
-            log.error("Quorum not reached for delete: operationId={}, "
+            log.warn("Quorum not reached for delete: operationId={}, "
                     + "totalAcks={}, requiredAcks={}", operationId, totalAcks, requiredAcks);
             throw new QuorumNotReachedException(
                     "Delete failed — received " + totalAcks + " ACKs, required " + requiredAcks);
@@ -98,7 +99,7 @@ public class InternalDeleteService {
 
         // Delete local shard
         secretPartRepository.deleteParts(key);
-        log.info("Distributed delete complete: operationId={}, secretKey={}", operationId, key);
+        log.info("Distributed delete complete: operationId={}", operationId);
     }
 
     /**
@@ -107,8 +108,12 @@ public class InternalDeleteService {
     private int broadcastPrepare(List<String> peerUrls, DeletePrepareRequest request) {
         int acks = 0;
         for (String peerUrl : peerUrls) {
-            if (nodeClient.sendDeletePrepare(peerUrl, request)) {
+            PeerResponse response = nodeClient.sendDeletePrepare(peerUrl, request);
+            if (response.acknowledged()) {
                 acks++;
+            } else {
+                log.debug("Prepare was not acknowledged by peer={}, status={}, error={}",
+                        response.peerUrl(), response.statusCode(), response.errorMessage());
             }
         }
         return acks;
@@ -121,10 +126,10 @@ public class InternalDeleteService {
      */
     private void broadcastCommit(List<String> peerUrls, DeleteCommitRequest request) {
         for (String peerUrl : peerUrls) {
-            if (!nodeClient.sendDeleteCommit(peerUrl, request)) {
-                log.warn("Commit delivery failed to peer {} for operationId={}, "
-                        + "peer may retry or evict buffer entry",
-                        peerUrl, request.getOperationId());
+            PeerResponse response = nodeClient.sendDeleteCommit(peerUrl, request);
+            if (!response.acknowledged()) {
+                log.warn("Commit delivery failed to peer {} for operationId={}, status={}",
+                        response.peerUrl(), request.getOperationId(), response.statusCode());
             }
         }
     }
