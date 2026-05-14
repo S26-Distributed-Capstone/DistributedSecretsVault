@@ -2,6 +2,7 @@ package edu.yu.capstone.DistributedSecretsVault.service.internal;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -38,14 +39,11 @@ public class DeletePrepareHandlerTest {
     }
 
     @Test
-    void testHandleBuffersDeleteWhenShardDoesNotExist() {
+    void testHandleThrowsWhenShardDoesNotExist() {
         when(secretPartRepository.exists(any(SecretKey.class))).thenReturn(false);
 
         DeletePrepareRequest request = createRequest("op-2", "user1", "secret1");
-        handler.handle(request);
-
-        // Buffer should still be called even if no local shard exists
-        verify(pendingDeleteBuffer).bufferDelete(request);
+        assertThrows(SecretNotFoundException.class, () -> handler.handle(request));
     }
 
     @Test

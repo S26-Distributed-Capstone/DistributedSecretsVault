@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
 /**
@@ -12,12 +13,10 @@ import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
  * <p>
  * When the originator broadcasts a delete-prepare, each peer:
  * <ol>
- *   <li>Validates the request</li>
- *   <li>Checks that the secret exists locally</li>
- *   <li>Buffers the delete in {@link PendingDeleteBuffer}</li>
+ * <li>Validates the request</li>
+ * <li>Checks that the secret exists locally</li>
+ * <li>Buffers the delete in {@link PendingDeleteBuffer}</li>
  * </ol>
- * If the secret does not exist locally, the prepare still succeeds —
- * the node simply has no shard to delete, which is a valid state.
  */
 @Service
 public class DeletePrepareHandler {
@@ -27,7 +26,7 @@ public class DeletePrepareHandler {
     private final SecretPartRepository secretPartRepository;
 
     public DeletePrepareHandler(PendingDeleteBuffer pendingDeleteBuffer,
-                                SecretPartRepository secretPartRepository) {
+            SecretPartRepository secretPartRepository) {
         this.pendingDeleteBuffer = pendingDeleteBuffer;
         this.secretPartRepository = secretPartRepository;
     }
@@ -37,16 +36,17 @@ public class DeletePrepareHandler {
      *
      * @param request the prepare request from the originator
      * @throws IllegalArgumentException if the request is invalid
+     * @throws SecretNotFoundException  if the secret does not exist locally
      */
     public void handle(DeletePrepareRequest request) {
         validateRequest(request);
 
         boolean exists = secretPartRepository.exists(request.getSecretKey());
-        log.info("Delete prepare received: operationId={}, secretKey={}, shardExists={}",
-                request.getOperationId(), request.getSecretKey(), exists);
-
-        // Buffer the delete regardless of whether we have a local shard.
-        // On commit, we'll only delete if there's something to delete.
+        if (!exists) {
+            log.warn("Delete prepare received for non-existent secret: operationId={}, secretKey={}",
+                    request.getOperationId(), request.getSecretKey());
+            throw new SecretNotFoundException("Secret not found: " + request.getSecretKey());
+        }
         pendingDeleteBuffer.bufferDelete(request);
     }
 
