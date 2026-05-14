@@ -31,50 +31,50 @@ public class GetSecretServiceTest {
 
     @Test
     void testValidateThrowsWhenUserNull() {
-        assertThrows(IllegalArgumentException.class, () -> getSecretService.execute(null, "secret1"));
+        assertThrows(IllegalArgumentException.class, () -> getSecretService.getVersion(null, "secret1", null));
     }
 
     @Test
     void testValidateThrowsWhenUserBlank() {
-        assertThrows(IllegalArgumentException.class, () -> getSecretService.execute("   ", "secret1"));
+        assertThrows(IllegalArgumentException.class, () -> getSecretService.getVersion("   ", "secret1", null));
     }
 
     @Test
     void testValidateThrowsWhenSecretNameNull() {
-        assertThrows(IllegalArgumentException.class, () -> getSecretService.execute("user1", null));
+        assertThrows(IllegalArgumentException.class, () -> getSecretService.getVersion("user1", null, null));
     }
 
     @Test
     void testValidateThrowsWhenSecretNameBlank() {
-        assertThrows(IllegalArgumentException.class, () -> getSecretService.execute("user1", "   "));
+        assertThrows(IllegalArgumentException.class, () -> getSecretService.getVersion("user1", "   ", null));
     }
 
     @Test
     void testExecuteNoVersionSuccess() {
         when(secretService.getSecret(any(SecretKey.class), eq(null))).thenReturn("value1");
-        ResponseEntity<String> response = getSecretService.execute("user1", "secret1");
+        ResponseEntity<String> response = getSecretService.getVersion("user1", "secret1", null);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("value1", response.getBody());
     }
 
     @Test
-    void testExecuteWithVersionSuccess() {
+    void testGetVersionSuccess() {
         when(secretService.getSecret(any(SecretKey.class), eq(2L))).thenReturn("value2");
-        ResponseEntity<String> response = getSecretService.execute("user1", "secret1", 2L);
+        ResponseEntity<String> response = getSecretService.getVersion("user1", "secret1", 2L);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("value2", response.getBody());
     }
 
     @Test
-    void testExecuteAllSuccess() {
+    void testGetAllVersionsSuccess() {
         Map<Long, String> expected = new HashMap<>();
         expected.put(1L, "v1");
         expected.put(2L, "v2");
         when(secretService.getAllVersions(any(SecretKey.class))).thenReturn(expected);
 
-        ResponseEntity<Map<Long, String>> response = getSecretService.executeAll("user1", "secret1");
+        ResponseEntity<Map<Long, String>> response = getSecretService.getAllVersions("user1", "secret1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(expected, response.getBody());

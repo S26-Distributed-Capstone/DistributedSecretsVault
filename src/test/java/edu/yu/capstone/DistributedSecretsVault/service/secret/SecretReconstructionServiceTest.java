@@ -1,5 +1,6 @@
 package edu.yu.capstone.DistributedSecretsVault.service.secret;
 
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,8 @@ public class SecretReconstructionServiceTest {
 
     @Test
     void testReconstructThrowsWhenPartsEmpty() {
-        assertThrows(InsufficientShardsException.class, () -> secretReconstructionService.reconstruct(Collections.emptyList()));
+        assertThrows(InsufficientShardsException.class,
+                () -> secretReconstructionService.reconstruct(Collections.emptyList()));
     }
 
     @Test
@@ -53,8 +55,7 @@ public class SecretReconstructionServiceTest {
     @Test
     void testReconstructSuccess() {
         SecretSharingService sharingService = new SecretSharingService();
-        edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey key = new edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey();
-        key.setName("test");
+        SecretKey key = new SecretKey("user", "test");
         List<SecretPart> parts = sharingService.split(key, "my-secret", 2, 3);
 
         // Use 2 parts to reconstruct

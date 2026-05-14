@@ -37,28 +37,29 @@ public class SecretController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<String> getSecret(@PathVariable String id, @RequestParam("user") String user, @RequestParam(value = "version", required = false) Long version) {
-        return this.getSecretService.execute(user, id, version);
+    public ResponseEntity<String> getSecret(@PathVariable String id, @RequestParam("user") String user,
+            @RequestParam(value = "version", required = false) Long version) {
+        return getSecretService.getVersion(user, id, version);
     }
 
     @GetMapping("/{id}/all")
     public ResponseEntity<Map<Long, String>> getAllSecrets(@PathVariable String id, @RequestParam("user") String user) {
-        return this.getSecretService.executeAll(user, id);
+        return getSecretService.getAllVersions(user, id);
     }
 
     @PostMapping
     public ResponseEntity<String> postSecret(@RequestBody PostSecretRequest request) {
-        return this.postSecretService.execute(request);
+        return postSecretService.execute(request);
     }
 
     @PutMapping
     public ResponseEntity<String> updateSecret(@RequestBody PutSecretRequest request) {
-        return this.putSecretService.execute(request);
+        return putSecretService.execute(request);
     }
 
     @DeleteMapping
     public ResponseEntity<Void> deleteSecret(@RequestBody DeleteSecretRequest request) {
-        return this.deleteSecretService.execute(request);
+        return deleteSecretService.execute(request);
     }
 
 }

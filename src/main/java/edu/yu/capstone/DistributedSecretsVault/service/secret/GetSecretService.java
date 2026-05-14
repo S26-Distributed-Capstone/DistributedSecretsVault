@@ -4,8 +4,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
-import edu.yu.capstone.DistributedSecretsVault.util.SecretKeyGenerator;
-
 import java.util.Map;
 
 @Service
@@ -17,17 +15,13 @@ public class GetSecretService {
         this.secretService = secretService;
     }
 
-    public ResponseEntity<String> execute(String user, String secretName) {
-        return execute(user, secretName, null);
-    }
-
-    public ResponseEntity<String> execute(String user, String secretName, Long version) {
+    public ResponseEntity<String> getVersion(String user, String secretName, Long version) {
         validate(user, secretName);
         String secretValue = secretService.getSecret(key, version);
         return ResponseEntity.ok(secretValue);
     }
 
-    public ResponseEntity<Map<Long, String>> executeAll(String user, String secretName) {
+    public ResponseEntity<Map<Long, String>> getAllVersions(String user, String secretName) {
         validate(user, secretName);
         return ResponseEntity.ok(secretService.getAllVersions(key));
     }
@@ -39,6 +33,6 @@ public class GetSecretService {
         if (secretName == null || secretName.isBlank()) {
             throw new IllegalArgumentException("Secret key is required");
         }
-        key = SecretKeyGenerator.of(user, secretName);
+        key = new SecretKey(user, secretName);
     }
 }
