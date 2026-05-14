@@ -72,9 +72,6 @@ public class DeletePrepareHandlerTest {
     }
 
     private DeletePrepareRequest createRequest(String operationId, String ownerId, String secretName) {
-        SecretKey key = new SecretKey();
-        key.setOwnerId(ownerId);
-        key.setName(secretName);
-        return new DeletePrepareRequest("originator-node", operationId, key);
+        return new DeletePrepareRequest("originator-node", operationId, new SecretKey(ownerId, secretName));
     }
 }

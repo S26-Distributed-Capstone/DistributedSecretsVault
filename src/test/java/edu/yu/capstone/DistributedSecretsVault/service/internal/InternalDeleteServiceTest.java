@@ -179,9 +179,6 @@ public class InternalDeleteServiceTest {
     }
 
     private SecretKey createKey(String ownerId, String name) {
-        SecretKey key = new SecretKey();
-        key.setOwnerId(ownerId);
-        key.setName(name);
-        return key;
+        return new SecretKey(ownerId, name);
     }
 }
