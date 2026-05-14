@@ -2,6 +2,7 @@ package edu.yu.capstone.DistributedSecretsVault.service.secret;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.DeleteSecretRequest;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalDeleteService;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,7 +22,7 @@ import static org.mockito.Mockito.verify;
 public class DeleteSecretServiceTest {
 
     @Mock
-    private SecretService secretService;
+    private InternalDeleteService internalDeleteService;
 
     @InjectMocks
     private DeleteSecretService deleteSecretService;
@@ -53,6 +54,6 @@ public class DeleteSecretServiceTest {
         ResponseEntity<Void> response = deleteSecretService.execute(request);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(secretService).deleteSecret(any(SecretKey.class));
+        verify(internalDeleteService).deleteAcrossCluster(any(SecretKey.class));
     }
 }
