@@ -7,6 +7,5 @@ package edu.yu.capstone.DistributedSecretsVault.service.internal;
 public enum ActionType {
     POST,
     DELETE,
-    UPDATE,
     PUT
 }
