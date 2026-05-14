@@ -3,6 +3,7 @@ package edu.yu.capstone.DistributedSecretsVault.service.secret;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PutSecretRequest;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalPutService;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +25,7 @@ import static org.mockito.Mockito.when;
 public class PutSecretServiceTest {
 
     @Mock
-    private SecretService secretService;
+    private InternalPutService internalPutService;
 
     @InjectMocks
     private PutSecretService putSecretService;
@@ -56,12 +57,12 @@ public class PutSecretServiceTest {
 
         SecretVersion version = new SecretVersion(new SecretKey("user1", "secret1"), 2L, System.currentTimeMillis());
 
-        when(secretService.updateSecret(any(SecretKey.class), eq("newVal"))).thenReturn(version);
+        when(internalPutService.putAcrossCluster(any(SecretKey.class), eq("newVal"))).thenReturn(version);
 
         ResponseEntity<String> response = putSecretService.execute(request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("Secret updated (version: 2)", response.getBody());
-        verify(secretService).updateSecret(any(SecretKey.class), eq("newVal"));
+        verify(internalPutService).putAcrossCluster(any(SecretKey.class), eq("newVal"));
     }
 }
