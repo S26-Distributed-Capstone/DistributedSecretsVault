@@ -9,7 +9,7 @@ This guide covers building and running the Distributed Secrets Vault using Docke
 
 ## Quick Start with Docker Compose (Recommended)
 
-The easiest way to run the application with Redis and PostgreSQL:
+The easiest way to run the application with Redis, PostgreSQL, and Kafka:
 
 ```bash
 # 1. Setup environment (from project root; optional for quick start)
@@ -27,6 +27,7 @@ The application will be available at:
 - **API:** `http://localhost:8080`
 - **Redis:** `localhost:6379`
 - **PostgreSQL:** `localhost:5432`
+- **Kafka:** `localhost:9092`
 
 ### Compose file layout
 
@@ -37,7 +38,7 @@ Compose files live under `docker/`; there is no single `docker-compose.yml` at t
 | `dsv/docker-compose.dsv.yml`                          | App only                                     |
 | `dsv/docker-compose.dsv-redis.yml`                    | App + Redis                                  |
 | `dsv/docker-compose.dsv-postgresql.yml`               | App + PostgreSQL                             |
-| `dsv/docker-compose.dsv-redis-postgresql.yml`         | App + Redis + PostgreSQL (full dev stack)    |
+| `dsv/docker-compose.dsv-redis-postgresql.yml`         | App + Redis + PostgreSQL + Kafka (full dev stack) |
 | `postgresql/docker-compose.postgresql.yml`            | PostgreSQL only (single node, dev)           |
 | `postgresql/docker-compose.postgresql-production.yml` | PostgreSQL primary + 2 standbys (production) |
 | `redis/docker-compose.redis.yml`                      | Redis only                                   |

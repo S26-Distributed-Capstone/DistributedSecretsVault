@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   # Max 12 nodes based on config. Missing nodes will stay pending (Standby behavior).
-  replicas: 1
+  replicas: 3
   serviceName: dsv-app-headless
   selector:
     matchLabels:
@@ -59,6 +59,8 @@ spec:
                   name: dsv-secrets
                   key: POSTGRES_PASSWORD
                   optional: true
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka.default.svc.cluster.local:9092"
         # Redis Sidecar container within the same Pod
         - name: redis-sidecar
           image: redis:8.6-alpine

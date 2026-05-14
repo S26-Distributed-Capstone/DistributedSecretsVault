@@ -171,7 +171,17 @@ For ScaleCube membership, startup is DNS-based in both production and testing:
 
 ---
 
-## 6. Testing Environments
+## 6. Kafka Infrastructure (Future)
+
+To prepare for future 2-Phase Commit coordination via event queuing, the cluster includes a Kafka broker.
+
+* **Development/Testing:** Deployed as a single-node StatefulSet (`kafka-statefulset.yaml`) alongside a headless service (`kafka-service.yaml`) for broker discovery. Uses KRaft configuration to eliminate the Zookeeper dependency.
+* **Production:** Currently a single-replica stateful set for foundational use, but intended to be scaled out if needed.
+* **Network mapping:** Exposes port 9092 internally. DSV app pods are configured to reach this broker via the `KAFKA_BOOTSTRAP_SERVERS` environment variable pointing to `kafka.default.svc.cluster.local:9092`.
+
+---
+
+## 7. Testing Environments
 
 To facilitate local testing via Docker Desktop, Minikube, or K3d without needing a multi-node architecture, the `k8s/testing` directory contains versions of these YAML files with the `podAntiAffinity` and `nodeAffinity` constraints stripped out, and the replica counts reduced to `1`. 
 
