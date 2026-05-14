@@ -12,12 +12,13 @@ import edu.yu.capstone.DistributedSecretsVault.config.ClusterConfig;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.CommitMessage;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.QuorumNotReachedException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.communication.CommitPublisher;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.PeerResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretSharingService;
 
@@ -28,16 +29,22 @@ public class InternalPostService {
     private final NodeClient nodeClient;
     private final SecretPartRepository secretPartRepository;
     private final SecretSharingService secretSharingService;
+    private final PendingActionsBuffer pendingActionsBuffer;
+    private final CommitPublisher commitPublisher;
     private final ClusterConfig clusterConfig;
     private final String nodeId;
 
     public InternalPostService(NodeClient nodeClient,
             SecretPartRepository secretPartRepository,
             SecretSharingService secretSharingService,
+            PendingActionsBuffer pendingActionsBuffer,
+            CommitPublisher commitPublisher,
             ClusterConfig clusterConfig) {
         this.nodeClient = nodeClient;
         this.secretPartRepository = secretPartRepository;
         this.secretSharingService = secretSharingService;
+        this.pendingActionsBuffer = pendingActionsBuffer;
+        this.commitPublisher = commitPublisher;
         this.clusterConfig = clusterConfig;
 
         String envNodeId = System.getenv("NODE_NAME");
@@ -61,18 +68,23 @@ public class InternalPostService {
         List<SecretPart> peerParts = parts.subList(1, parts.size());
         List<String> peerUrls = nodeClient.resolvePeerUrls();
 
+        pendingActionsBuffer.bufferAction(operationId, key, ActionType.POST, localPart);
         int peerAcks = broadcastPrepare(peerUrls, peerParts, operationId);
         int totalAcks = peerAcks + 1;
         int requiredAcks = computeRequiredAcks();
         if (totalAcks < requiredAcks) {
+            pendingActionsBuffer.discard(operationId);
             throw new QuorumNotReachedException(
                     "Post failed - received " + totalAcks + " ACKs, required " + requiredAcks);
         }
 
-        PostCommitRequest commitRequest = new PostCommitRequest(operationId, key);
-        broadcastCommit(peerUrls, commitRequest);
-        secretPartRepository.savePart(localPart);
-        log.info("Distributed post complete: operationId={}", operationId);
+        try {
+            commitPublisher.broadcastCommit(new CommitMessage(operationId, key, ActionType.POST));
+        } catch (RuntimeException e) {
+            pendingActionsBuffer.discard(operationId);
+            throw e;
+        }
+        log.info("Distributed post commit submitted to Kafka: operationId={}", operationId);
         return new SecretVersion(key, version, System.currentTimeMillis());
     }
 
@@ -97,16 +109,6 @@ public class InternalPostService {
             }
         }
         return acks;
-    }
-
-    private void broadcastCommit(List<String> peerUrls, PostCommitRequest request) {
-        for (String peerUrl : peerUrls) {
-            PeerResponse response = nodeClient.sendPostCommit(peerUrl, request);
-            if (!response.acknowledged()) {
-                log.warn("Post commit delivery failed to peer {} for operationId={}, status={}",
-                        response.peerUrl(), request.getOperationId(), response.statusCode());
-            }
-        }
     }
 
     private List<SecretPart> createParts(SecretKey key, String value, long version) {

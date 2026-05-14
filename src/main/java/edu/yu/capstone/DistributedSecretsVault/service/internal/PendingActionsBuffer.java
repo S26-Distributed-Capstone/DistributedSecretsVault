@@ -40,10 +40,10 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 public class PendingActionsBuffer {
     private static final Logger log = LoggerFactory.getLogger(PendingActionsBuffer.class);
 
-    /** Primary index: operationId → PendingAction. */
+    /** Primary index: operationId to PendingAction. */
     private final Map<UUID, PendingAction> byOperationId = new ConcurrentHashMap<>();
 
-    /** Secondary index: SecretKey → set of operationIds affecting that key. */
+    /** Secondary index: SecretKey to set of operationIds affecting that key. */
     private final Map<SecretKey, Set<UUID>> bySecretKey = new ConcurrentHashMap<>();
 
     private final Map<SecretKey, KeyLock> locksBySecretKey = new ConcurrentHashMap<>();
@@ -57,7 +57,7 @@ public class PendingActionsBuffer {
     /**
      * Buffer an action received during the prepare phase.
      *
-     * @param operationId unique ID correlating prepare → commit
+     * @param operationId unique ID correlating prepare to commit
      * @param secretKey   the key being affected by this action
      * @param actionType  the type of action being buffered
      */
@@ -124,6 +124,26 @@ public class PendingActionsBuffer {
             log.debug("Committed and removed action: operationId={}, type={}",
                     operationId, committed.actionType());
             return committed;
+        } finally {
+            releaseLock(candidate.secretKey(), keyLock);
+        }
+    }
+
+    public PendingAction discard(UUID operationId) {
+        PendingAction candidate = byOperationId.get(operationId);
+        if (candidate == null) {
+            return null;
+        }
+
+        KeyLock keyLock = acquireLock(candidate.secretKey());
+        try {
+            PendingAction removed = byOperationId.remove(operationId);
+            if (removed != null) {
+                removeFromSecretKeyIndex(removed.secretKey(), operationId);
+                log.debug("Discarded pending action: operationId={}, type={}",
+                        operationId, removed.actionType());
+            }
+            return removed;
         } finally {
             releaseLock(candidate.secretKey(), keyLock);
         }

@@ -14,12 +14,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 
 @WebMvcTest(InternalController.class)
@@ -35,13 +32,7 @@ public class InternalControllerPostTest {
     private PostPrepareHandler postPrepareHandler;
 
     @MockitoBean
-    private PostCommitHandler postCommitHandler;
-
-    @MockitoBean
     private DeletePrepareHandler deletePrepareHandler;
-
-    @MockitoBean
-    private DeleteCommitHandler deleteCommitHandler;
 
     @Test
     void testPreparePostReturnsNoContent() throws Exception {
@@ -67,20 +58,4 @@ public class InternalControllerPostTest {
         verify(postPrepareHandler).handle(any(PostPrepareRequest.class));
     }
 
-    @Test
-    void testCommitPostReturnsNoContent() throws Exception {
-        doNothing().when(postCommitHandler).handle(any(PostCommitRequest.class));
-
-        mockMvc.perform(post("/internal/commit")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                        {
-                          "operationId": "11111111-1111-1111-1111-111111111111",
-                          "secretKey": {"ownerId": "user1", "name": "secret1"}
-                        }
-                        """))
-                .andExpect(status().isNoContent());
-
-        verify(postCommitHandler).handle(any(PostCommitRequest.class));
-    }
 }

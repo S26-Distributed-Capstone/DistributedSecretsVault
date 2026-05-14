@@ -56,6 +56,11 @@ public class DeleteCommitHandler {
                     "No staged operation found for commit: " + request.getOperationId());
         }
 
+        if (committed.actionType() != ActionType.DELETE) {
+            throw new InternalOperationConflictException(
+                    "Staged operation is not a delete: " + request.getOperationId());
+        }
+
         if (!committed.secretKey().equals(request.getSecretKey())) {
             throw new InternalOperationConflictException(
                     "Commit secret key does not match staged operation: " + request.getOperationId());

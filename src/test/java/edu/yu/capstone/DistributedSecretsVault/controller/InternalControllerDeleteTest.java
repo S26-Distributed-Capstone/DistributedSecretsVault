@@ -1,11 +1,8 @@
 package edu.yu.capstone.DistributedSecretsVault.controller;
 
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -36,13 +33,7 @@ public class InternalControllerDeleteTest {
     private PostPrepareHandler postPrepareHandler;
 
     @MockitoBean
-    private PostCommitHandler postCommitHandler;
-
-    @MockitoBean
     private DeletePrepareHandler deletePrepareHandler;
-
-    @MockitoBean
-    private DeleteCommitHandler deleteCommitHandler;
 
     @Test
     void testPrepareDeleteReturnsNoContent() throws Exception {
@@ -59,19 +50,6 @@ public class InternalControllerDeleteTest {
     }
 
     @Test
-    void testCommitDeleteReturnsNoContent() throws Exception {
-        doNothing().when(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
-
-        mockMvc.perform(delete("/internal/commit")
-                .param("operationId", OPERATION_ID)
-                .param("secretKeyOwnerId", "user1")
-                .param("secretKeyName", "secret1"))
-                .andExpect(status().isNoContent());
-
-        verify(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
-    }
-
-    @Test
     void testPrepareDeleteReturnsBadRequestOnValidationFailure() throws Exception {
         doThrow(new IllegalArgumentException("Operation ID is required"))
                 .when(deletePrepareHandler).handle(any(DeletePrepareRequest.class));
@@ -85,18 +63,6 @@ public class InternalControllerDeleteTest {
     }
 
     @Test
-    void testCommitDeleteReturnsBadRequestOnValidationFailure() throws Exception {
-        doThrow(new IllegalArgumentException("Secret key is required"))
-                .when(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
-
-        mockMvc.perform(delete("/internal/commit")
-                .param("operationId", OPERATION_ID)
-                .param("secretKeyOwnerId", "user1")
-                .param("secretKeyName", "secret1"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
     void testPrepareDeleteReturnsBadRequestWhenParamsMissing() throws Exception {
         // Missing required query params should return 400
         mockMvc.perform(delete("/internal/prepare")
@@ -104,11 +70,4 @@ public class InternalControllerDeleteTest {
                 .andExpect(status().isBadRequest());
     }
 
-    @Test
-    void testCommitDeleteReturnsBadRequestWhenParamsMissing() throws Exception {
-        // Missing required query params should return 400
-        mockMvc.perform(delete("/internal/commit")
-                .param("operationId", OPERATION_ID))
-                .andExpect(status().isBadRequest());
-    }
 }

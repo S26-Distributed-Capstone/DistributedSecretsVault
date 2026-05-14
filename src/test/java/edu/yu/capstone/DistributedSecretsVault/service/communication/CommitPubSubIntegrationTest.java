@@ -1,7 +1,9 @@
 package edu.yu.capstone.DistributedSecretsVault.service.communication;
 
 import edu.yu.capstone.DistributedSecretsVault.config.KafkaConfig;
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.CommitMessage;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.ActionType;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -70,11 +72,9 @@ public class CommitPubSubIntegrationTest {
         String bootstrap = broker.getBrokersAsString();
 
         CommitMessage message = new CommitMessage(
-                UUID.randomUUID().toString(),
-                "secret-123",
-                CommitMessage.Action.POST,
-                "encrypted-payload",
-                System.currentTimeMillis());
+                UUID.randomUUID(),
+                new SecretKey("user1", "secret-123"),
+                ActionType.POST);
 
         KafkaTemplate<String, Object> kafkaTemplate = new KafkaTemplate<>(producerFactory(bootstrap));
         CommitPublisher publisher = new CommitPublisher(kafkaTemplate);
@@ -86,7 +86,7 @@ public class CommitPubSubIntegrationTest {
         for (int i = 0; i < NODE_COUNT; i++) {
             final String groupId = "dsv-coordination-group-node-" + i;
             futures.add(executor.submit(
-                    receiveCommitOnNode(bootstrap, groupId, message.getTransactionId(), allNodesSubscribed)));
+                    receiveCommitOnNode(bootstrap, groupId, message.getOperationId(), allNodesSubscribed)));
         }
 
         // Block until each node consumer has joined the group and been assigned partitions
@@ -104,17 +104,16 @@ public class CommitPubSubIntegrationTest {
 
         for (CommitMessage got : received) {
             assertNotNull(got);
-            assertEquals(message.getTransactionId(), got.getTransactionId());
-            assertEquals(message.getSecretId(), got.getSecretId());
-            assertEquals(message.getAction(), got.getAction());
-            assertEquals(message.getPayload(), got.getPayload());
+            assertEquals(message.getOperationId(), got.getOperationId());
+            assertEquals(message.getSecretKey(), got.getSecretKey());
+            assertEquals(message.getActionType(), got.getActionType());
         }
     }
 
     private static Callable<CommitMessage> receiveCommitOnNode(
             String bootstrap,
             String groupId,
-            String expectedTxId,
+            UUID expectedOperationId,
             CyclicBarrier allNodesSubscribed) {
         return () -> {
             try (KafkaConsumer<String, CommitMessage> consumer = new KafkaConsumer<>(consumerProps(bootstrap, groupId))) {
@@ -132,12 +131,12 @@ public class CommitPubSubIntegrationTest {
                     ConsumerRecords<String, CommitMessage> records = consumer.poll(POLL);
                     for (ConsumerRecord<String, CommitMessage> record : records) {
                         CommitMessage value = record.value();
-                        if (value != null && expectedTxId.equals(value.getTransactionId())) {
+                        if (value != null && expectedOperationId.equals(value.getOperationId())) {
                             return value;
                         }
                     }
                 }
-                throw new AssertionError("node " + groupId + " did not receive commit for " + expectedTxId);
+                throw new AssertionError("node " + groupId + " did not receive commit for " + expectedOperationId);
             }
         };
     }

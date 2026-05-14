@@ -1,5 +1,9 @@
 package edu.yu.capstone.DistributedSecretsVault.dto.internal;
 
+import java.util.UUID;
+
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.ActionType;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -8,14 +12,7 @@ import lombok.AllArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CommitMessage {
-    
-    public enum Action {
-        PUT, POST, DELETE
-    }
-
-    private String transactionId;
-    private String secretId;
-    private Action action;
-    private String payload;
-    private long timestamp;
+    private UUID operationId;
+    private SecretKey secretKey;
+    private ActionType actionType;
 }

@@ -12,9 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import io.scalecube.services.Microservices;
 
@@ -85,34 +83,6 @@ public class NodeClient {
         }
     }
 
-    /**
-     * Send a delete commit request to a peer node.
-     *
-     * @param peerUrl base URL of the peer
-     * @param request the commit request
-     * @return peer response details, including status/error data when not acknowledged
-     */
-    public PeerResponse sendDeleteCommit(String peerUrl, DeleteCommitRequest request) {
-        try {
-            restClient.delete()
-                    .uri(peerUrl
-                            + "/internal/commit?operationId={opId}&secretKeyOwnerId={owner}&secretKeyName={name}",
-                            request.getOperationId(),
-                            request.getSecretKey().getOwnerId(),
-                            request.getSecretKey().getName())
-                    .retrieve()
-                    .toBodilessEntity();
-            log.debug("Commit ACK received from {}", peerUrl);
-            return PeerResponse.acknowledged(peerUrl);
-        } catch (RestClientResponseException ex) {
-            log.warn("Delete commit rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
-            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
-        } catch (Exception ex) {
-            log.warn("Failed to send delete commit to {}: {}", peerUrl, ex.getMessage());
-            return PeerResponse.failed(peerUrl, ex.getMessage());
-        }
-    }
-
     public PeerResponse sendPostPrepare(String peerUrl, PostPrepareRequest request) {
         try {
             restClient.post()
@@ -131,24 +101,6 @@ public class NodeClient {
         }
     }
 
-    public PeerResponse sendPostCommit(String peerUrl, PostCommitRequest request) {
-        try {
-            restClient.post()
-                    .uri(peerUrl + "/internal/commit")
-                    .body(request)
-                    .retrieve()
-                    .toBodilessEntity();
-            log.debug("Post commit ACK received from {}", peerUrl);
-            return PeerResponse.acknowledged(peerUrl);
-        } catch (RestClientResponseException ex) {
-            log.warn("Post commit rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
-            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
-        } catch (Exception ex) {
-            log.warn("Failed to send post commit to {}: {}", peerUrl, ex.getMessage());
-            return PeerResponse.failed(peerUrl, ex.getMessage());
-        }
-    }
-
     /**
      * Resolve peer node base URLs using ScaleCube's service discovery.
      * <p>
@@ -162,7 +114,7 @@ public class NodeClient {
      */
     public List<String> resolvePeerUrls() {
         if (microservices.isEmpty()) {
-            log.debug("ScaleCube not available — no peers to resolve (single-node mode)");
+            log.debug("ScaleCube not available - no peers to resolve (single-node mode)");
             return List.of();
         }
 

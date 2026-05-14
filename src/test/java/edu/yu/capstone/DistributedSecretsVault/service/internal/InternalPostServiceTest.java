@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,11 +22,12 @@ import edu.yu.capstone.DistributedSecretsVault.config.ClusterConfig;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.CommitMessage;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.QuorumNotReachedException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.communication.CommitPublisher;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.PeerResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretSharingService;
 
@@ -42,6 +43,12 @@ public class InternalPostServiceTest {
     @Mock
     private SecretSharingService secretSharingService;
 
+    @Mock
+    private PendingActionsBuffer pendingActionsBuffer;
+
+    @Mock
+    private CommitPublisher commitPublisher;
+
     private ClusterConfig clusterConfig;
     private InternalPostService service;
     private SecretKey key;
@@ -52,7 +59,8 @@ public class InternalPostServiceTest {
         clusterConfig.setTotalNodes(3);
         clusterConfig.setThresholdK(2);
         clusterConfig.setQuorumM(2);
-        service = new InternalPostService(nodeClient, secretPartRepository, secretSharingService, clusterConfig);
+        service = new InternalPostService(nodeClient, secretPartRepository, secretSharingService, pendingActionsBuffer,
+                commitPublisher, clusterConfig);
         key = new SecretKey("user1", "secret1");
     }
 
@@ -63,14 +71,12 @@ public class InternalPostServiceTest {
         when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
         when(nodeClient.sendPostPrepare(anyString(), any(PostPrepareRequest.class)))
                 .thenAnswer(invocation -> PeerResponse.acknowledged(invocation.getArgument(0)));
-        when(nodeClient.sendPostCommit(anyString(), any(PostCommitRequest.class)))
-                .thenAnswer(invocation -> PeerResponse.acknowledged(invocation.getArgument(0)));
-
         SecretVersion version = service.postAcrossCluster(key, "value1");
 
         assertEquals(1L, version.getVersion());
-        verify(secretPartRepository).savePart(any(SecretPart.class));
-        verify(nodeClient, times(2)).sendPostCommit(anyString(), any(PostCommitRequest.class));
+        verify(pendingActionsBuffer).bufferAction(any(), eq(key), eq(ActionType.POST), any(SecretPart.class));
+        verify(commitPublisher).broadcastCommit(any(CommitMessage.class));
+        verify(secretPartRepository, never()).savePart(any(SecretPart.class));
     }
 
     @Test
@@ -93,7 +99,7 @@ public class InternalPostServiceTest {
         assertThrows(QuorumNotReachedException.class, () -> service.postAcrossCluster(key, "value1"));
 
         verify(secretPartRepository, never()).savePart(any());
-        verify(nodeClient, never()).sendPostCommit(anyString(), any());
+        verify(commitPublisher, never()).broadcastCommit(any());
     }
 
     private List<SecretPart> parts() {
