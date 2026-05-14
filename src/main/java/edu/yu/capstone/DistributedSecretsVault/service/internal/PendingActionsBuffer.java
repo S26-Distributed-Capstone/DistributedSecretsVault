@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -39,10 +40,10 @@ public class PendingActionsBuffer {
     private static final Logger log = LoggerFactory.getLogger(PendingActionsBuffer.class);
 
     /** Primary index: operationId → PendingAction. */
-    private final Map<String, PendingAction> byOperationId = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingAction> byOperationId = new ConcurrentHashMap<>();
 
     /** Secondary index: SecretKey → set of operationIds affecting that key. */
-    private final Map<SecretKey, Set<String>> bySecretKey = new ConcurrentHashMap<>();
+    private final Map<SecretKey, Set<UUID>> bySecretKey = new ConcurrentHashMap<>();
 
     private final Map<SecretKey, KeyLock> locksBySecretKey = new ConcurrentHashMap<>();
     private final long evictionTimeoutMillis;
@@ -59,7 +60,7 @@ public class PendingActionsBuffer {
      * @param secretKey   the key being affected by this action
      * @param actionType  the type of action being buffered
      */
-    public void bufferAction(String operationId, SecretKey secretKey, ActionType actionType) {
+    public void bufferAction(UUID operationId, SecretKey secretKey, ActionType actionType) {
         PendingAction entry = new PendingAction(operationId, secretKey, actionType, Instant.now());
         KeyLock keyLock = acquireLock(secretKey);
         try {
@@ -84,7 +85,7 @@ public class PendingActionsBuffer {
      * @param operationId the operation ID from the commit request
      * @return the pending action, or {@code null} if not found / already evicted
      */
-    public PendingAction commitAndRemove(String operationId) {
+    public PendingAction commitAndRemove(UUID operationId) {
         PendingAction candidate = byOperationId.get(operationId);
         if (candidate == null) {
             log.debug("No pending action found for operationId={}", operationId);
@@ -101,9 +102,9 @@ public class PendingActionsBuffer {
 
             // Remove all other pending actions for the same secret key
             SecretKey key = committed.secretKey();
-            Set<String> relatedOps = bySecretKey.remove(key);
+            Set<UUID> relatedOps = bySecretKey.remove(key);
             if (relatedOps != null) {
-                for (String relatedOpId : relatedOps) {
+                for (UUID relatedOpId : relatedOps) {
                     if (!relatedOpId.equals(operationId)) {
                         PendingAction evicted = byOperationId.remove(relatedOpId);
                         if (evicted != null) {
@@ -126,7 +127,7 @@ public class PendingActionsBuffer {
     /**
      * Check whether an action is currently buffered for the given operation ID.
      */
-    public boolean contains(String operationId) {
+    public boolean contains(UUID operationId) {
         PendingAction action = byOperationId.get(operationId);
         if (action == null) {
             return false;
@@ -145,7 +146,7 @@ public class PendingActionsBuffer {
     public boolean containsKey(SecretKey secretKey) {
         KeyLock keyLock = acquireLock(secretKey);
         try {
-            Set<String> ops = bySecretKey.get(secretKey);
+            Set<UUID> ops = bySecretKey.get(secretKey);
             return ops != null && !ops.isEmpty();
         } finally {
             releaseLock(secretKey, keyLock);
@@ -161,9 +162,9 @@ public class PendingActionsBuffer {
         Instant cutoff = Instant.now().minusMillis(evictionTimeoutMillis);
         List<PendingAction> candidates = new ArrayList<>();
 
-        Iterator<Map.Entry<String, PendingAction>> it = byOperationId.entrySet().iterator();
+        Iterator<Map.Entry<UUID, PendingAction>> it = byOperationId.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<String, PendingAction> entry = it.next();
+            Map.Entry<UUID, PendingAction> entry = it.next();
             if (entry.getValue().bufferedAt().isBefore(cutoff)) {
                 candidates.add(entry.getValue());
             }
@@ -188,8 +189,8 @@ public class PendingActionsBuffer {
         }
     }
 
-    private void removeFromSecretKeyIndex(SecretKey key, String operationId) {
-        Set<String> ops = bySecretKey.get(key);
+    private void removeFromSecretKeyIndex(SecretKey key, UUID operationId) {
+        Set<UUID> ops = bySecretKey.get(key);
         if (ops != null) {
             ops.remove(operationId);
             if (ops.isEmpty()) {
@@ -253,7 +254,7 @@ public class PendingActionsBuffer {
      * @param bufferedAt  when this action was buffered
      */
     public record PendingAction(
-            String operationId,
+            UUID operationId,
             SecretKey secretKey,
             ActionType actionType,
             Instant bufferedAt) {

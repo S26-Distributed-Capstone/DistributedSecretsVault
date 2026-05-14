@@ -11,6 +11,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -33,18 +35,19 @@ public class DeletePrepareHandlerTest {
     void testHandleBuffersDeleteWhenShardExists() {
         when(secretPartRepository.exists(any(SecretKey.class))).thenReturn(true);
 
-        DeletePrepareRequest request = createRequest("op-1", "user1", "secret1");
+        UUID operationId = UUID.randomUUID();
+        DeletePrepareRequest request = createRequest(operationId, "user1", "secret1");
         handler.handle(request);
 
         verify(pendingActionsBuffer).bufferAction(
-                eq("op-1"), any(SecretKey.class), eq(ActionType.DELETE));
+                eq(operationId), any(SecretKey.class), eq(ActionType.DELETE));
     }
 
     @Test
     void testHandleThrowsWhenShardDoesNotExist() {
         when(secretPartRepository.exists(any(SecretKey.class))).thenReturn(false);
 
-        DeletePrepareRequest request = createRequest("op-2", "user1", "secret1");
+        DeletePrepareRequest request = createRequest(UUID.randomUUID(), "user1", "secret1");
         assertThrows(SecretNotFoundException.class, () -> handler.handle(request));
 
         verify(pendingActionsBuffer, never()).bufferAction(any(), any(), any());
@@ -62,18 +65,12 @@ public class DeletePrepareHandlerTest {
     }
 
     @Test
-    void testHandleThrowsWhenOperationIdBlank() {
-        DeletePrepareRequest request = createRequest("   ", "user1", "secret1");
-        assertThrows(IllegalArgumentException.class, () -> handler.handle(request));
-    }
-
-    @Test
     void testHandleThrowsWhenSecretKeyNull() {
-        DeletePrepareRequest request = new DeletePrepareRequest("originator", "op-3", null);
+        DeletePrepareRequest request = new DeletePrepareRequest("originator", UUID.randomUUID(), null);
         assertThrows(IllegalArgumentException.class, () -> handler.handle(request));
     }
 
-    private DeletePrepareRequest createRequest(String operationId, String ownerId, String secretName) {
+    private DeletePrepareRequest createRequest(UUID operationId, String ownerId, String secretName) {
         SecretKey key = new SecretKey(ownerId, secretName);
         return new DeletePrepareRequest("originator-node", operationId, key);
     }

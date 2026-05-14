@@ -55,7 +55,7 @@ public class DeletePrepareHandler {
         if (request == null) {
             throw new IllegalArgumentException("Delete prepare request is required");
         }
-        if (request.getOperationId() == null || request.getOperationId().isBlank()) {
+        if (request.getOperationId() == null) {
             throw new IllegalArgumentException("Operation ID is required");
         }
         if (request.getSecretKey() == null) {

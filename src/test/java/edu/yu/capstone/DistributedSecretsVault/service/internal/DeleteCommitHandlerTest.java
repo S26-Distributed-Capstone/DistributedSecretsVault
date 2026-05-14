@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,26 +35,28 @@ public class DeleteCommitHandlerTest {
     @Test
     void testHandleDeletesShardWhenBufferedAndExists() {
         SecretKey key = new SecretKey("user1", "secret1");
-        PendingAction buffered = new PendingAction("op-1", key, ActionType.DELETE, Instant.now());
+        UUID operationId = UUID.randomUUID();
+        PendingAction buffered = new PendingAction(operationId, key, ActionType.DELETE, Instant.now());
 
-        when(pendingActionsBuffer.commitAndRemove("op-1")).thenReturn(buffered);
+        when(pendingActionsBuffer.commitAndRemove(operationId)).thenReturn(buffered);
         when(secretPartRepository.exists(key)).thenReturn(true);
 
-        handler.handle(new DeleteCommitRequest("op-1", key));
+        handler.handle(new DeleteCommitRequest(operationId, key));
 
-        verify(pendingActionsBuffer).commitAndRemove("op-1");
+        verify(pendingActionsBuffer).commitAndRemove(operationId);
         verify(secretPartRepository).deleteParts(key);
     }
 
     @Test
     void testHandleSkipsDeleteWhenNoLocalShard() {
         SecretKey key = new SecretKey("user1", "secret1");
-        PendingAction buffered = new PendingAction("op-2", key, ActionType.DELETE, Instant.now());
+        UUID operationId = UUID.randomUUID();
+        PendingAction buffered = new PendingAction(operationId, key, ActionType.DELETE, Instant.now());
 
-        when(pendingActionsBuffer.commitAndRemove("op-2")).thenReturn(buffered);
+        when(pendingActionsBuffer.commitAndRemove(operationId)).thenReturn(buffered);
         when(secretPartRepository.exists(key)).thenReturn(false);
 
-        handler.handle(new DeleteCommitRequest("op-2", key));
+        handler.handle(new DeleteCommitRequest(operationId, key));
 
         verify(secretPartRepository, never()).deleteParts(any());
     }
@@ -61,11 +64,12 @@ public class DeleteCommitHandlerTest {
     @Test
     void testHandleThrowsWhenBufferEntryMissing() {
         SecretKey key = new SecretKey("user1", "secret1");
+        UUID operationId = UUID.randomUUID();
 
-        when(pendingActionsBuffer.commitAndRemove("op-3")).thenReturn(null);
+        when(pendingActionsBuffer.commitAndRemove(operationId)).thenReturn(null);
 
         assertThrows(InternalOperationConflictException.class,
-                () -> handler.handle(new DeleteCommitRequest("op-3", key)));
+                () -> handler.handle(new DeleteCommitRequest(operationId, key)));
 
         verify(secretPartRepository, never()).deleteParts(any());
     }
@@ -73,11 +77,12 @@ public class DeleteCommitHandlerTest {
     @Test
     void testHandleThrowsWhenBufferMissingAndNoShard() {
         SecretKey key = new SecretKey("user1", "secret1");
+        UUID operationId = UUID.randomUUID();
 
-        when(pendingActionsBuffer.commitAndRemove("op-4")).thenReturn(null);
+        when(pendingActionsBuffer.commitAndRemove(operationId)).thenReturn(null);
 
         assertThrows(InternalOperationConflictException.class,
-                () -> handler.handle(new DeleteCommitRequest("op-4", key)));
+                () -> handler.handle(new DeleteCommitRequest(operationId, key)));
 
         verify(secretPartRepository, never()).deleteParts(any());
     }
@@ -86,12 +91,13 @@ public class DeleteCommitHandlerTest {
     void testHandleThrowsWhenCommitKeyDiffersFromBufferedKey() {
         SecretKey bufferedKey = new SecretKey("user1", "secret1");
         SecretKey commitKey = new SecretKey("user1", "secret2");
-        PendingAction buffered = new PendingAction("op-6", bufferedKey, ActionType.DELETE, Instant.now());
+        UUID operationId = UUID.randomUUID();
+        PendingAction buffered = new PendingAction(operationId, bufferedKey, ActionType.DELETE, Instant.now());
 
-        when(pendingActionsBuffer.commitAndRemove("op-6")).thenReturn(buffered);
+        when(pendingActionsBuffer.commitAndRemove(operationId)).thenReturn(buffered);
 
         assertThrows(InternalOperationConflictException.class,
-                () -> handler.handle(new DeleteCommitRequest("op-6", commitKey)));
+                () -> handler.handle(new DeleteCommitRequest(operationId, commitKey)));
 
         verify(secretPartRepository, never()).deleteParts(any());
     }
@@ -109,15 +115,8 @@ public class DeleteCommitHandlerTest {
     }
 
     @Test
-    void testHandleThrowsWhenOperationIdBlank() {
-        SecretKey key = new SecretKey("user1", "secret1");
-        assertThrows(IllegalArgumentException.class,
-                () -> handler.handle(new DeleteCommitRequest("   ", key)));
-    }
-
-    @Test
     void testHandleThrowsWhenSecretKeyNull() {
         assertThrows(IllegalArgumentException.class,
-                () -> handler.handle(new DeleteCommitRequest("op-5", null)));
+                () -> handler.handle(new DeleteCommitRequest(UUID.randomUUID(), null)));
     }
 }

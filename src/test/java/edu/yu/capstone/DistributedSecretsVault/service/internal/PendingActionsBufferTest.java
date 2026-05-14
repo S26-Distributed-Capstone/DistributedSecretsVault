@@ -7,6 +7,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("unit")
@@ -21,92 +23,91 @@ public class PendingActionsBufferTest {
         buffer = new PendingActionsBuffer(config);
     }
 
-    // ── Basic buffer / retrieve ────────────────────────────────────────
-
     @Test
     void testBufferAndCommit() {
         SecretKey key = new SecretKey("user1", "secret1");
-        buffer.bufferAction("op-1", key, ActionType.DELETE);
+        UUID operationId = UUID.randomUUID();
+        buffer.bufferAction(operationId, key, ActionType.DELETE);
 
-        assertTrue(buffer.contains("op-1"));
+        assertTrue(buffer.contains(operationId));
         assertTrue(buffer.containsKey(key));
 
-        PendingAction committed = buffer.commitAndRemove("op-1");
+        PendingAction committed = buffer.commitAndRemove(operationId);
         assertNotNull(committed);
-        assertEquals("op-1", committed.operationId());
+        assertEquals(operationId, committed.operationId());
         assertEquals(key, committed.secretKey());
         assertEquals(ActionType.DELETE, committed.actionType());
 
-        assertFalse(buffer.contains("op-1"));
+        assertFalse(buffer.contains(operationId));
         assertFalse(buffer.containsKey(key));
     }
 
     @Test
     void testCommitAndRemoveReturnsNullForUnknownOperationId() {
-        assertNull(buffer.commitAndRemove("nonexistent"));
+        assertNull(buffer.commitAndRemove(UUID.randomUUID()));
     }
 
     @Test
     void testContainsReturnsFalseForUnknownOperationId() {
-        assertFalse(buffer.contains("nonexistent"));
+        assertFalse(buffer.contains(UUID.randomUUID()));
     }
 
     @Test
     void testCommitOnlyRemovesOnce() {
         SecretKey key = new SecretKey("user1", "secret1");
-        buffer.bufferAction("op-2", key, ActionType.DELETE);
+        UUID operationId = UUID.randomUUID();
+        buffer.bufferAction(operationId, key, ActionType.DELETE);
 
-        assertNotNull(buffer.commitAndRemove("op-2"));
-        assertNull(buffer.commitAndRemove("op-2"));
+        assertNotNull(buffer.commitAndRemove(operationId));
+        assertNull(buffer.commitAndRemove(operationId));
     }
-
-    // ── Multiple actions for different keys ─────────────────────────────
 
     @Test
     void testMultipleActionsForDifferentKeys() {
         SecretKey key1 = new SecretKey("user1", "secret1");
         SecretKey key2 = new SecretKey("user2", "secret2");
         SecretKey key3 = new SecretKey("user3", "secret3");
+        UUID opA = UUID.randomUUID();
+        UUID opB = UUID.randomUUID();
+        UUID opC = UUID.randomUUID();
 
-        buffer.bufferAction("op-a", key1, ActionType.DELETE);
-        buffer.bufferAction("op-b", key2, ActionType.UPDATE);
-        buffer.bufferAction("op-c", key3, ActionType.DELETE);
+        buffer.bufferAction(opA, key1, ActionType.DELETE);
+        buffer.bufferAction(opB, key2, ActionType.UPDATE);
+        buffer.bufferAction(opC, key3, ActionType.DELETE);
 
-        assertTrue(buffer.contains("op-a"));
-        assertTrue(buffer.contains("op-b"));
-        assertTrue(buffer.contains("op-c"));
+        assertTrue(buffer.contains(opA));
+        assertTrue(buffer.contains(opB));
+        assertTrue(buffer.contains(opC));
 
-        assertNotNull(buffer.commitAndRemove("op-b"));
-        assertFalse(buffer.contains("op-b"));
+        assertNotNull(buffer.commitAndRemove(opB));
+        assertFalse(buffer.contains(opB));
         assertFalse(buffer.containsKey(key2));
-
-        // Other keys unaffected
-        assertTrue(buffer.contains("op-a"));
-        assertTrue(buffer.contains("op-c"));
+        assertTrue(buffer.contains(opA));
+        assertTrue(buffer.contains(opC));
     }
-
-    // ── Cascade: commit one action removes all others for same key ──────
 
     @Test
     void testCommitCascadeRemovesOtherActionsForSameKey() {
         SecretKey sameKey = new SecretKey("user1", "secret1");
+        UUID op1 = UUID.randomUUID();
+        UUID op2 = UUID.randomUUID();
+        UUID op3 = UUID.randomUUID();
 
-        buffer.bufferAction("op-1", sameKey, ActionType.DELETE);
-        buffer.bufferAction("op-2", sameKey, ActionType.UPDATE);
-        buffer.bufferAction("op-3", sameKey, ActionType.DELETE);
+        buffer.bufferAction(op1, sameKey, ActionType.DELETE);
+        buffer.bufferAction(op2, sameKey, ActionType.UPDATE);
+        buffer.bufferAction(op3, sameKey, ActionType.DELETE);
 
-        assertTrue(buffer.contains("op-1"));
-        assertTrue(buffer.contains("op-2"));
-        assertTrue(buffer.contains("op-3"));
+        assertTrue(buffer.contains(op1));
+        assertTrue(buffer.contains(op2));
+        assertTrue(buffer.contains(op3));
 
-        // Commit op-2 → should cascade remove op-1 and op-3
-        PendingAction committed = buffer.commitAndRemove("op-2");
+        PendingAction committed = buffer.commitAndRemove(op2);
         assertNotNull(committed);
-        assertEquals("op-2", committed.operationId());
+        assertEquals(op2, committed.operationId());
 
-        assertFalse(buffer.contains("op-1"));
-        assertFalse(buffer.contains("op-2"));
-        assertFalse(buffer.contains("op-3"));
+        assertFalse(buffer.contains(op1));
+        assertFalse(buffer.contains(op2));
+        assertFalse(buffer.contains(op3));
         assertFalse(buffer.containsKey(sameKey));
     }
 
@@ -114,38 +115,36 @@ public class PendingActionsBufferTest {
     void testCascadeDoesNotAffectDifferentKeys() {
         SecretKey key1 = new SecretKey("user1", "secret1");
         SecretKey key2 = new SecretKey("user2", "secret2");
+        UUID opA = UUID.randomUUID();
+        UUID opB = UUID.randomUUID();
+        UUID opC = UUID.randomUUID();
 
-        buffer.bufferAction("op-a", key1, ActionType.DELETE);
-        buffer.bufferAction("op-b", key1, ActionType.DELETE);
-        buffer.bufferAction("op-c", key2, ActionType.DELETE);
+        buffer.bufferAction(opA, key1, ActionType.DELETE);
+        buffer.bufferAction(opB, key1, ActionType.DELETE);
+        buffer.bufferAction(opC, key2, ActionType.DELETE);
 
-        // Commit op-a → cascades op-b (same key1), but op-c (key2) stays
-        buffer.commitAndRemove("op-a");
+        buffer.commitAndRemove(opA);
 
-        assertFalse(buffer.contains("op-a"));
-        assertFalse(buffer.contains("op-b"));
-        assertTrue(buffer.contains("op-c"));
+        assertFalse(buffer.contains(opA));
+        assertFalse(buffer.contains(opB));
+        assertTrue(buffer.contains(opC));
         assertTrue(buffer.containsKey(key2));
     }
-
-    // ── Different action types ──────────────────────────────────────────
 
     @Test
     void testBufferDifferentActionTypes() {
         SecretKey key = new SecretKey("user1", "secret1");
+        UUID opDel = UUID.randomUUID();
+        UUID opUpd = UUID.randomUUID();
 
-        buffer.bufferAction("op-del", key, ActionType.DELETE);
-        buffer.bufferAction("op-upd", key, ActionType.UPDATE);
+        buffer.bufferAction(opDel, key, ActionType.DELETE);
+        buffer.bufferAction(opUpd, key, ActionType.UPDATE);
 
-        PendingAction del = buffer.commitAndRemove("op-del");
+        PendingAction del = buffer.commitAndRemove(opDel);
         assertNotNull(del);
         assertEquals(ActionType.DELETE, del.actionType());
-
-        // op-upd should have been cascade removed
-        assertFalse(buffer.contains("op-upd"));
+        assertFalse(buffer.contains(opUpd));
     }
-
-    // ── Eviction ────────────────────────────────────────────────────────
 
     @Test
     void testEvictExpiredRemovesOldEntries() throws InterruptedException {
@@ -154,24 +153,26 @@ public class PendingActionsBufferTest {
         PendingActionsBuffer shortBuffer = new PendingActionsBuffer(shortTimeoutConfig);
 
         SecretKey key = new SecretKey("user1", "secret1");
-        shortBuffer.bufferAction("op-expire", key, ActionType.DELETE);
-        assertTrue(shortBuffer.contains("op-expire"));
+        UUID operationId = UUID.randomUUID();
+        shortBuffer.bufferAction(operationId, key, ActionType.DELETE);
+        assertTrue(shortBuffer.contains(operationId));
 
         Thread.sleep(100);
         shortBuffer.evictExpired();
 
-        assertFalse(shortBuffer.contains("op-expire"));
+        assertFalse(shortBuffer.contains(operationId));
         assertFalse(shortBuffer.containsKey(key));
     }
 
     @Test
     void testEvictExpiredKeepsRecentEntries() {
         SecretKey key = new SecretKey("user1", "secret1");
-        buffer.bufferAction("op-recent", key, ActionType.DELETE);
+        UUID operationId = UUID.randomUUID();
+        buffer.bufferAction(operationId, key, ActionType.DELETE);
 
         buffer.evictExpired();
 
-        assertTrue(buffer.contains("op-recent"));
+        assertTrue(buffer.contains(operationId));
     }
 
     @Test
@@ -181,11 +182,10 @@ public class PendingActionsBufferTest {
         PendingActionsBuffer zeroBuffer = new PendingActionsBuffer(zeroConfig);
 
         SecretKey key = new SecretKey("user1", "secret1");
-        zeroBuffer.bufferAction("op-zero", key, ActionType.DELETE);
-        assertTrue(zeroBuffer.contains("op-zero"));
+        UUID operationId = UUID.randomUUID();
+        zeroBuffer.bufferAction(operationId, key, ActionType.DELETE);
+        assertTrue(zeroBuffer.contains(operationId));
     }
-
-    // ── containsKey ─────────────────────────────────────────────────────
 
     @Test
     void testContainsKeyReturnsFalseForUnknownKey() {
@@ -199,8 +199,8 @@ public class PendingActionsBufferTest {
         PendingActionsBuffer shortBuffer = new PendingActionsBuffer(shortTimeoutConfig);
 
         SecretKey key = new SecretKey("user1", "secret1");
-        shortBuffer.bufferAction("op-1", key, ActionType.DELETE);
-        shortBuffer.bufferAction("op-2", key, ActionType.UPDATE);
+        shortBuffer.bufferAction(UUID.randomUUID(), key, ActionType.DELETE);
+        shortBuffer.bufferAction(UUID.randomUUID(), key, ActionType.UPDATE);
         assertTrue(shortBuffer.containsKey(key));
 
         Thread.sleep(100);

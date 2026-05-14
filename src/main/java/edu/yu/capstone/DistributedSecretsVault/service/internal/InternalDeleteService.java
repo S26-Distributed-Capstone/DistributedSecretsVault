@@ -68,7 +68,7 @@ public class InternalDeleteService {
             throw new SecretNotFoundException();
         }
 
-        String operationId = UUID.randomUUID().toString();
+        UUID operationId = UUID.randomUUID();
         log.info("Starting distributed delete: operationId={}", operationId);
 
         // Phase 1: Prepare — broadcast to peers
@@ -159,7 +159,7 @@ public class InternalDeleteService {
      * @param operationId the unique operation identifier
      * @param key         the secret key being deleted
      */
-    private void submitToTimingAuthority(String operationId, SecretKey key) {
+    private void submitToTimingAuthority(UUID operationId, SecretKey key) {
         // TODO: Replace with Kafka producer call when CTA is implemented.
         // The Kafka message would contain operationId + secretKey, and
         // all nodes (including this one) would consume the commit from Kafka

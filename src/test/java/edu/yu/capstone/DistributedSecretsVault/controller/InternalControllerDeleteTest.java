@@ -23,6 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(InternalController.class)
 @Tag("slice")
 public class InternalControllerDeleteTest {
+    private static final String OPERATION_ID = "11111111-1111-1111-1111-111111111111";
 
     @Autowired
     private MockMvc mockMvc;
@@ -45,7 +46,7 @@ public class InternalControllerDeleteTest {
 
         mockMvc.perform(delete("/internal/prepare")
                 .param("originatorNodeId", "node-1")
-                .param("operationId", "op-123")
+                .param("operationId", OPERATION_ID)
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
                 .andExpect(status().isNoContent());
@@ -58,7 +59,7 @@ public class InternalControllerDeleteTest {
         doNothing().when(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
 
         mockMvc.perform(delete("/internal/commit")
-                .param("operationId", "op-123")
+                .param("operationId", OPERATION_ID)
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
                 .andExpect(status().isNoContent());
@@ -73,7 +74,7 @@ public class InternalControllerDeleteTest {
 
         mockMvc.perform(delete("/internal/prepare")
                 .param("originatorNodeId", "node-1")
-                .param("operationId", "")
+                .param("operationId", "not-a-uuid")
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
                 .andExpect(status().isBadRequest());
@@ -85,7 +86,7 @@ public class InternalControllerDeleteTest {
                 .when(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
 
         mockMvc.perform(delete("/internal/commit")
-                .param("operationId", "op-123")
+                .param("operationId", OPERATION_ID)
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
                 .andExpect(status().isBadRequest());
@@ -103,7 +104,7 @@ public class InternalControllerDeleteTest {
     void testCommitDeleteReturnsBadRequestWhenParamsMissing() throws Exception {
         // Missing required query params should return 400
         mockMvc.perform(delete("/internal/commit")
-                .param("operationId", "op-123"))
+                .param("operationId", OPERATION_ID))
                 .andExpect(status().isBadRequest());
     }
 }

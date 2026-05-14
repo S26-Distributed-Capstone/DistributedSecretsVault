@@ -1,5 +1,7 @@
 package edu.yu.capstone.DistributedSecretsVault.dto.internal;
 
+import java.util.UUID;
+
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,7 +23,7 @@ public class DeletePrepareRequest {
     private String originatorNodeId;
 
     /** UUID correlating prepare → commit for this delete operation. */
-    private String operationId;
+    private UUID operationId;
 
     /** The secret key identifying which secret to delete. */
     private SecretKey secretKey;

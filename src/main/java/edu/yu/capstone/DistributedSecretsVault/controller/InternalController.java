@@ -11,6 +11,7 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService;
 
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -58,7 +59,7 @@ public class InternalController {
     @DeleteMapping("/prepare")
     public ResponseEntity<Void> prepareDelete(
             @RequestParam("originatorNodeId") String originatorNodeId,
-            @RequestParam("operationId") String operationId,
+            @RequestParam("operationId") UUID operationId,
             @RequestParam("secretKeyOwnerId") String secretKeyOwnerId,
             @RequestParam("secretKeyName") String secretKeyName) {
         SecretKey secretKey = new SecretKey(secretKeyOwnerId, secretKeyName);
@@ -69,7 +70,7 @@ public class InternalController {
 
     @DeleteMapping("/commit")
     public ResponseEntity<Void> commitDelete(
-            @RequestParam("operationId") String operationId,
+            @RequestParam("operationId") UUID operationId,
             @RequestParam("secretKeyOwnerId") String secretKeyOwnerId,
             @RequestParam("secretKeyName") String secretKeyName) {
         SecretKey secretKey = new SecretKey(secretKeyOwnerId, secretKeyName);
