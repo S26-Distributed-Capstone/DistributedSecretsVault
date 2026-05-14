@@ -64,7 +64,7 @@ public class InternalController {
         SecretKey secretKey = new SecretKey(secretKeyOwnerId, secretKeyName);
         DeletePrepareRequest request = new DeletePrepareRequest(originatorNodeId, operationId, secretKey);
         deletePrepareHandler.handle(request);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/commit")
@@ -75,6 +75,6 @@ public class InternalController {
         SecretKey secretKey = new SecretKey(secretKeyOwnerId, secretKeyName);
         DeleteCommitRequest request = new DeleteCommitRequest(operationId, secretKey);
         deleteCommitHandler.handle(request);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 }

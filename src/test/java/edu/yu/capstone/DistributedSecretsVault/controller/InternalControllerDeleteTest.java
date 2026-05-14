@@ -40,7 +40,7 @@ public class InternalControllerDeleteTest {
     private DeleteCommitHandler deleteCommitHandler;
 
     @Test
-    void testPrepareDeleteReturnsOk() throws Exception {
+    void testPrepareDeleteReturnsNoContent() throws Exception {
         doNothing().when(deletePrepareHandler).handle(any(DeletePrepareRequest.class));
 
         mockMvc.perform(delete("/internal/prepare")
@@ -48,20 +48,20 @@ public class InternalControllerDeleteTest {
                 .param("operationId", "op-123")
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
-                .andExpect(status().isOk());
+                .andExpect(status().isNoContent());
 
         verify(deletePrepareHandler).handle(any(DeletePrepareRequest.class));
     }
 
     @Test
-    void testCommitDeleteReturnsOk() throws Exception {
+    void testCommitDeleteReturnsNoContent() throws Exception {
         doNothing().when(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
 
         mockMvc.perform(delete("/internal/commit")
                 .param("operationId", "op-123")
                 .param("secretKeyOwnerId", "user1")
                 .param("secretKeyName", "secret1"))
-                .andExpect(status().isOk());
+                .andExpect(status().isNoContent());
 
         verify(deleteCommitHandler).handle(any(DeleteCommitRequest.class));
     }

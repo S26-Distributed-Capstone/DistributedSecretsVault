@@ -1,8 +1,10 @@
 package edu.yu.capstone.DistributedSecretsVault.service.internal;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -127,7 +129,7 @@ public class NodeClient {
         }
 
         Microservices ms = microservices.get();
-        List<String> peerUrls = new ArrayList<>();
+        Set<String> peerUrls = new LinkedHashSet<>();
 
         ms.serviceEndpoints().forEach(endpoint -> {
             // endpoint.address() returns "host:port" (ScaleCube RSocket port)
@@ -135,13 +137,13 @@ public class NodeClient {
             String address = endpoint.address().toString();
             String host = extractHost(address);
 
-            if (!host.equals(selfHost)) {
+            if (!host.isBlank() && !host.equals(selfHost)) {
                 peerUrls.add("http://" + host + ":" + httpPort);
             }
         });
 
         log.debug("Resolved {} peer(s) from ScaleCube service endpoints", peerUrls.size());
-        return peerUrls;
+        return new ArrayList<>(peerUrls);
     }
 
     /**
