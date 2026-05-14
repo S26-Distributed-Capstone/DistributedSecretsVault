@@ -2,14 +2,16 @@ package edu.yu.capstone.DistributedSecretsVault.service.internal;
 
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PendingActionsBuffer.PendingAction;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,7 +22,7 @@ import static org.mockito.Mockito.*;
 public class DeleteCommitHandlerTest {
 
     @Mock
-    private PendingDeleteBuffer pendingDeleteBuffer;
+    private PendingActionsBuffer pendingActionsBuffer;
 
     @Mock
     private SecretPartRepository secretPartRepository;
@@ -30,24 +32,24 @@ public class DeleteCommitHandlerTest {
 
     @Test
     void testHandleDeletesShardWhenBufferedAndExists() {
-        SecretKey key = createKey("user1", "secret1");
-        DeletePrepareRequest buffered = new DeletePrepareRequest("originator", "op-1", key);
+        SecretKey key = new SecretKey("user1", "secret1");
+        PendingAction buffered = new PendingAction("op-1", key, ActionType.DELETE, Instant.now());
 
-        when(pendingDeleteBuffer.getAndRemove("op-1")).thenReturn(buffered);
+        when(pendingActionsBuffer.commitAndRemove("op-1")).thenReturn(buffered);
         when(secretPartRepository.exists(key)).thenReturn(true);
 
         handler.handle(new DeleteCommitRequest("op-1", key));
 
-        verify(pendingDeleteBuffer).getAndRemove("op-1");
+        verify(pendingActionsBuffer).commitAndRemove("op-1");
         verify(secretPartRepository).deleteParts(key);
     }
 
     @Test
     void testHandleSkipsDeleteWhenNoLocalShard() {
-        SecretKey key = createKey("user1", "secret1");
-        DeletePrepareRequest buffered = new DeletePrepareRequest("originator", "op-2", key);
+        SecretKey key = new SecretKey("user1", "secret1");
+        PendingAction buffered = new PendingAction("op-2", key, ActionType.DELETE, Instant.now());
 
-        when(pendingDeleteBuffer.getAndRemove("op-2")).thenReturn(buffered);
+        when(pendingActionsBuffer.commitAndRemove("op-2")).thenReturn(buffered);
         when(secretPartRepository.exists(key)).thenReturn(false);
 
         handler.handle(new DeleteCommitRequest("op-2", key));
@@ -57,10 +59,9 @@ public class DeleteCommitHandlerTest {
 
     @Test
     void testHandleStillDeletesWhenBufferEntryMissing() {
-        // Entry may have been evicted, but we should still attempt the delete
-        SecretKey key = createKey("user1", "secret1");
+        SecretKey key = new SecretKey("user1", "secret1");
 
-        when(pendingDeleteBuffer.getAndRemove("op-3")).thenReturn(null);
+        when(pendingActionsBuffer.commitAndRemove("op-3")).thenReturn(null);
         when(secretPartRepository.exists(key)).thenReturn(true);
 
         handler.handle(new DeleteCommitRequest("op-3", key));
@@ -70,9 +71,9 @@ public class DeleteCommitHandlerTest {
 
     @Test
     void testHandleNoOpWhenBufferMissingAndNoShard() {
-        SecretKey key = createKey("user1", "secret1");
+        SecretKey key = new SecretKey("user1", "secret1");
 
-        when(pendingDeleteBuffer.getAndRemove("op-4")).thenReturn(null);
+        when(pendingActionsBuffer.commitAndRemove("op-4")).thenReturn(null);
         when(secretPartRepository.exists(key)).thenReturn(false);
 
         handler.handle(new DeleteCommitRequest("op-4", key));
@@ -87,14 +88,14 @@ public class DeleteCommitHandlerTest {
 
     @Test
     void testHandleThrowsWhenOperationIdNull() {
-        SecretKey key = createKey("user1", "secret1");
+        SecretKey key = new SecretKey("user1", "secret1");
         assertThrows(IllegalArgumentException.class,
                 () -> handler.handle(new DeleteCommitRequest(null, key)));
     }
 
     @Test
     void testHandleThrowsWhenOperationIdBlank() {
-        SecretKey key = createKey("user1", "secret1");
+        SecretKey key = new SecretKey("user1", "secret1");
         assertThrows(IllegalArgumentException.class,
                 () -> handler.handle(new DeleteCommitRequest("   ", key)));
     }
@@ -103,9 +104,5 @@ public class DeleteCommitHandlerTest {
     void testHandleThrowsWhenSecretKeyNull() {
         assertThrows(IllegalArgumentException.class,
                 () -> handler.handle(new DeleteCommitRequest("op-5", null)));
-    }
-
-    private SecretKey createKey(String ownerId, String name) {
-        return new SecretKey(ownerId, name);
     }
 }

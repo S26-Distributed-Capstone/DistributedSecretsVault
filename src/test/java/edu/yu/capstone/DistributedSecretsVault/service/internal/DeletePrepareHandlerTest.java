@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -20,7 +21,7 @@ import static org.mockito.Mockito.*;
 public class DeletePrepareHandlerTest {
 
     @Mock
-    private PendingDeleteBuffer pendingDeleteBuffer;
+    private PendingActionsBuffer pendingActionsBuffer;
 
     @Mock
     private SecretPartRepository secretPartRepository;
@@ -35,7 +36,8 @@ public class DeletePrepareHandlerTest {
         DeletePrepareRequest request = createRequest("op-1", "user1", "secret1");
         handler.handle(request);
 
-        verify(pendingDeleteBuffer).bufferDelete(request);
+        verify(pendingActionsBuffer).bufferAction(
+                eq("op-1"), any(SecretKey.class), eq(ActionType.DELETE));
     }
 
     @Test
@@ -44,6 +46,8 @@ public class DeletePrepareHandlerTest {
 
         DeletePrepareRequest request = createRequest("op-2", "user1", "secret1");
         assertThrows(SecretNotFoundException.class, () -> handler.handle(request));
+
+        verify(pendingActionsBuffer, never()).bufferAction(any(), any(), any());
     }
 
     @Test
@@ -70,6 +74,7 @@ public class DeletePrepareHandlerTest {
     }
 
     private DeletePrepareRequest createRequest(String operationId, String ownerId, String secretName) {
-        return new DeletePrepareRequest("originator-node", operationId, new SecretKey(ownerId, secretName));
+        SecretKey key = new SecretKey(ownerId, secretName);
+        return new DeletePrepareRequest("originator-node", operationId, key);
     }
 }

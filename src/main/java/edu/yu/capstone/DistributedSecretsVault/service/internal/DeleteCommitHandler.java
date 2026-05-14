@@ -5,17 +5,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
-import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.PendingActionsBuffer.PendingAction;
 
 /**
  * Handles incoming <b>commit</b> requests on peer nodes.
  * <p>
  * When the originator broadcasts a delete-commit, each peer:
  * <ol>
- *   <li>Looks up the buffered delete by {@code operationId}</li>
+ *   <li>Looks up the buffered action by {@code operationId}</li>
  *   <li>Executes the actual delete via {@link SecretPartRepository#deleteParts}</li>
  * </ol>
+ * Committing an action also removes all other pending actions for the same
+ * {@link edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey}
+ * (handled by {@link PendingActionsBuffer#commitAndRemove}).
+ * <p>
  * If the pending entry has already been evicted or was never buffered,
  * the commit logs a warning but does not fail — the shard may have
  * already been cleaned up.
@@ -24,12 +28,12 @@ import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 public class DeleteCommitHandler {
     private static final Logger log = LoggerFactory.getLogger(DeleteCommitHandler.class);
 
-    private final PendingDeleteBuffer pendingDeleteBuffer;
+    private final PendingActionsBuffer pendingActionsBuffer;
     private final SecretPartRepository secretPartRepository;
 
-    public DeleteCommitHandler(PendingDeleteBuffer pendingDeleteBuffer,
+    public DeleteCommitHandler(PendingActionsBuffer pendingActionsBuffer,
                                SecretPartRepository secretPartRepository) {
-        this.pendingDeleteBuffer = pendingDeleteBuffer;
+        this.pendingActionsBuffer = pendingActionsBuffer;
         this.secretPartRepository = secretPartRepository;
     }
 
@@ -42,9 +46,9 @@ public class DeleteCommitHandler {
     public void handle(DeleteCommitRequest request) {
         validateRequest(request);
 
-        DeletePrepareRequest buffered = pendingDeleteBuffer.getAndRemove(request.getOperationId());
+        PendingAction committed = pendingActionsBuffer.commitAndRemove(request.getOperationId());
 
-        if (buffered == null) {
+        if (committed == null) {
             log.warn("Commit received for unknown/expired operationId={}, "
                     + "attempting delete anyway for secretKey={}",
                     request.getOperationId(), request.getSecretKey());

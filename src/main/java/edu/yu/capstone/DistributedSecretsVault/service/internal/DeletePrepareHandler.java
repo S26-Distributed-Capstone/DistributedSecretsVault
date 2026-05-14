@@ -15,19 +15,19 @@ import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
  * <ol>
  * <li>Validates the request</li>
  * <li>Checks that the secret exists locally</li>
- * <li>Buffers the delete in {@link PendingDeleteBuffer}</li>
+ * <li>Buffers the delete in {@link PendingActionsBuffer}</li>
  * </ol>
  */
 @Service
 public class DeletePrepareHandler {
     private static final Logger log = LoggerFactory.getLogger(DeletePrepareHandler.class);
 
-    private final PendingDeleteBuffer pendingDeleteBuffer;
+    private final PendingActionsBuffer pendingActionsBuffer;
     private final SecretPartRepository secretPartRepository;
 
-    public DeletePrepareHandler(PendingDeleteBuffer pendingDeleteBuffer,
+    public DeletePrepareHandler(PendingActionsBuffer pendingActionsBuffer,
             SecretPartRepository secretPartRepository) {
-        this.pendingDeleteBuffer = pendingDeleteBuffer;
+        this.pendingActionsBuffer = pendingActionsBuffer;
         this.secretPartRepository = secretPartRepository;
     }
 
@@ -47,7 +47,8 @@ public class DeletePrepareHandler {
                     request.getOperationId(), request.getSecretKey());
             throw new SecretNotFoundException("Secret not found: " + request.getSecretKey());
         }
-        pendingDeleteBuffer.bufferDelete(request);
+        pendingActionsBuffer.bufferAction(
+                request.getOperationId(), request.getSecretKey(), ActionType.DELETE);
     }
 
     private void validateRequest(DeletePrepareRequest request) {
