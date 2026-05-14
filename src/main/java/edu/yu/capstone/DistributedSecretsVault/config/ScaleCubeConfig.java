@@ -6,6 +6,8 @@ import io.scalecube.services.annotations.ServiceMethod;
 import io.scalecube.services.discovery.ScalecubeServiceDiscovery;
 import io.scalecube.services.transport.rsocket.RSocketServiceTransport;
 import io.scalecube.net.Address;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -20,6 +22,7 @@ import java.util.List;
 @Configuration
 @Profile("!test | scalecube-single-node")
 public class ScaleCubeConfig {
+    private static final Logger log = LoggerFactory.getLogger(ScaleCubeConfig.class);
     private static final int DEFAULT_CLUSTER_PORT = 4801;
     private static final int DEFAULT_DNS_RESOLVE_MAX_ATTEMPTS = 5;
     private static final long DEFAULT_DNS_RESOLVE_RETRY_DELAY_MS = 1000L;
@@ -77,9 +80,9 @@ public class ScaleCubeConfig {
         Address[] seedMembers = resolveSeedMembersWithRetry(seedDnsHost, seedDnsPort,
                 DEFAULT_DNS_RESOLVE_MAX_ATTEMPTS, DEFAULT_DNS_RESOLVE_RETRY_DELAY_MS, InetAddress::getAllByName);
 
-        System.out.println("Starting ScaleCube node on " + podIp + ":" + resolvedClusterPort);
-        System.out.println("ScaleCube DNS seed host: " + seedDnsHost + ":" + seedDnsPort);
-        System.out.println("Resolved ScaleCube seed endpoints: " + seedMembers.length);
+        log.info("Starting ScaleCube node on {}:{}", podIp, resolvedClusterPort);
+        log.info("ScaleCube DNS seed host: {}:{}", seedDnsHost, seedDnsPort);
+        log.info("Resolved ScaleCube seed endpoints: {}", seedMembers.length);
 
         // 3. Build and start the ScaleCube microservices node
         this.microservices = Microservices.builder()
@@ -96,7 +99,7 @@ public class ScaleCubeConfig {
                 .transport(RSocketServiceTransport::new)
                 .startAwait();
 
-        System.out.println("ScaleCube node started successfully. Node ID: " + microservices.id());
+        log.info("ScaleCube node started successfully. Node ID: {}", microservices.id());
         
         return microservices;
     }
@@ -104,7 +107,7 @@ public class ScaleCubeConfig {
     @PreDestroy
     public void stopScaleCube() {
         if (microservices != null) {
-            System.out.println("Shutting down ScaleCube node...");
+            log.info("Shutting down ScaleCube node");
             microservices.shutdown().block();
         }
     }
@@ -120,8 +123,8 @@ public class ScaleCubeConfig {
                 if (attempt == maxAttempts) {
                     break;
                 }
-                System.out.println("Failed to resolve ScaleCube DNS seeds on attempt " + attempt + "/" + maxAttempts
-                        + " for host " + seedDnsHost + ", retrying...");
+                log.warn("Failed to resolve ScaleCube DNS seeds on attempt {}/{} for host {}, retrying",
+                        attempt, maxAttempts, seedDnsHost);
                 sleepQuietly(retryDelayMs);
             }
         }
