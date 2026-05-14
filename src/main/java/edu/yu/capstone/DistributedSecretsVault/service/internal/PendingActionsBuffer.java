@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 
 import edu.yu.capstone.DistributedSecretsVault.config.ClusterConfig;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 
 /**
  * Thread-safe in-memory buffer for pending cluster operations on peer nodes.
@@ -61,7 +62,11 @@ public class PendingActionsBuffer {
      * @param actionType  the type of action being buffered
      */
     public void bufferAction(UUID operationId, SecretKey secretKey, ActionType actionType) {
-        PendingAction entry = new PendingAction(operationId, secretKey, actionType, Instant.now());
+        bufferAction(operationId, secretKey, actionType, null);
+    }
+
+    public void bufferAction(UUID operationId, SecretKey secretKey, ActionType actionType, SecretPart secretPart) {
+        PendingAction entry = new PendingAction(operationId, secretKey, actionType, secretPart, Instant.now());
         KeyLock keyLock = acquireLock(secretKey);
         try {
             byOperationId.put(operationId, entry);
@@ -251,12 +256,17 @@ public class PendingActionsBuffer {
      * @param operationId unique operation identifier
      * @param secretKey   the key being affected
      * @param actionType  the type of action
+     * @param secretPart  optional staged shard payload for write operations
      * @param bufferedAt  when this action was buffered
      */
     public record PendingAction(
             UUID operationId,
             SecretKey secretKey,
             ActionType actionType,
+            SecretPart secretPart,
             Instant bufferedAt) {
+        public PendingAction(UUID operationId, SecretKey secretKey, ActionType actionType, Instant bufferedAt) {
+            this(operationId, secretKey, actionType, null, bufferedAt);
+        }
     }
 }

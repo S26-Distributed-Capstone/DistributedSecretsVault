@@ -5,6 +5,7 @@ package edu.yu.capstone.DistributedSecretsVault.service.internal;
  * {@link PendingActionsBuffer} during the prepare phase.
  */
 public enum ActionType {
+    POST,
     DELETE,
     UPDATE,
     PUT

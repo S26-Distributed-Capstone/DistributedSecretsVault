@@ -7,13 +7,14 @@ import org.springframework.stereotype.Service;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PostSecretRequest;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalPostService;
 
 @Service
 public class PostSecretService implements SecretCommand<PostSecretRequest, String> {
-    private final SecretService secretService;
+    private final InternalPostService internalPostService;
 
-    public PostSecretService(SecretService secretService) {
-        this.secretService = secretService;
+    public PostSecretService(InternalPostService internalPostService) {
+        this.internalPostService = internalPostService;
     }
 
     @Override
@@ -25,7 +26,7 @@ public class PostSecretService implements SecretCommand<PostSecretRequest, Strin
             throw new IllegalArgumentException("User is required");
         }
         SecretKey key = new SecretKey(input.getUser(), input.getSecretName());
-        SecretVersion version = secretService.storeSecret(key, input.getSecretValue());
+        SecretVersion version = internalPostService.postAcrossCluster(key, input.getSecretValue());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body("Secret created (version: " + version.getVersion() + ")");
     }

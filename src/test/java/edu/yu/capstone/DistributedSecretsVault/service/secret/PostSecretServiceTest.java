@@ -3,6 +3,7 @@ package edu.yu.capstone.DistributedSecretsVault.service.secret;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PostSecretRequest;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalPostService;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +25,7 @@ import static org.mockito.Mockito.when;
 public class PostSecretServiceTest {
 
     @Mock
-    private SecretService secretService;
+    private InternalPostService internalPostService;
 
     @InjectMocks
     private PostSecretService postSecretService;
@@ -59,12 +60,12 @@ public class PostSecretServiceTest {
         SecretKey key = new SecretKey(request.getUser(), request.getSecretName());
         SecretVersion version = new SecretVersion(key, 1L, System.currentTimeMillis());
 
-        when(secretService.storeSecret(any(SecretKey.class), eq("value1"))).thenReturn(version);
+        when(internalPostService.postAcrossCluster(any(SecretKey.class), eq("value1"))).thenReturn(version);
 
         ResponseEntity<String> response = postSecretService.execute(request);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertEquals("Secret created (version: 1)", response.getBody());
-        verify(secretService).storeSecret(any(SecretKey.class), eq("value1"));
+        verify(internalPostService).postAcrossCluster(any(SecretKey.class), eq("value1"));
     }
 }
