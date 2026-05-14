@@ -1,8 +1,9 @@
 package edu.yu.capstone.DistributedSecretsVault.controller;
 
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
-import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
@@ -54,14 +55,25 @@ public class InternalController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/delete/prepare")
-    public ResponseEntity<Void> prepareDelete(@RequestBody DeletePrepareRequest request) {
+    @DeleteMapping("/delete/prepare")
+    public ResponseEntity<Void> prepareDelete(
+            @RequestParam("originatorNodeId") String originatorNodeId,
+            @RequestParam("operationId") String operationId,
+            @RequestParam("secretKeyOwnerId") String secretKeyOwnerId,
+            @RequestParam("secretKeyName") String secretKeyName) {
+        SecretKey secretKey = new SecretKey(secretKeyOwnerId, secretKeyName);
+        DeletePrepareRequest request = new DeletePrepareRequest(originatorNodeId, operationId, secretKey);
         deletePrepareHandler.handle(request);
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/delete/commit")
-    public ResponseEntity<Void> commitDelete(@RequestBody DeleteCommitRequest request) {
+    @DeleteMapping("/delete/commit")
+    public ResponseEntity<Void> commitDelete(
+            @RequestParam("operationId") String operationId,
+            @RequestParam("secretKeyOwnerId") String secretKeyOwnerId,
+            @RequestParam("secretKeyName") String secretKeyName) {
+        SecretKey secretKey = new SecretKey(secretKeyOwnerId, secretKeyName);
+        DeleteCommitRequest request = new DeleteCommitRequest(operationId, secretKey);
         deleteCommitHandler.handle(request);
         return ResponseEntity.ok().build();
     }
