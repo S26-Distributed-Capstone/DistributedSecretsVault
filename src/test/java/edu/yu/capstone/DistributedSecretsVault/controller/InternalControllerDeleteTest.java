@@ -4,7 +4,7 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 import org.junit.jupiter.api.Tag;
@@ -30,7 +30,7 @@ public class InternalControllerDeleteTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private GetShardService getShardService;
+    private InternalGetService internalGetService;
 
     @MockitoBean
     private PostPrepareHandler postPrepareHandler;

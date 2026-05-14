@@ -18,7 +18,7 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
-import edu.yu.capstone.DistributedSecretsVault.service.internal.GetShardService;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 
@@ -29,7 +29,7 @@ public class InternalControllerPostTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private GetShardService getShardService;
+    private InternalGetService internalGetService;
 
     @MockitoBean
     private PostPrepareHandler postPrepareHandler;

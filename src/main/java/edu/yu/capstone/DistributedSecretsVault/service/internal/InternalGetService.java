@@ -14,10 +14,10 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
-public class GetShardService {
+public class InternalGetService {
     private final SecretPartRepository secretPartRepository;
 
-    public GetShardService(SecretPartRepository secretPartRepository) {
+    public InternalGetService(SecretPartRepository secretPartRepository) {
         this.secretPartRepository = secretPartRepository;
     }
 
@@ -26,12 +26,9 @@ public class GetShardService {
         if (!secretPartRepository.exists(key)) {
             throw new SecretNotFoundException();
         }
-        Optional<SecretPart> part = Optional.empty();
-        if (version == null) {
-            part = secretPartRepository.findLatest(key);
-        } else {
-            part = secretPartRepository.findPart(key, version);
-        }
+        Optional<SecretPart> part = version == null
+                ? secretPartRepository.findLatest(key)
+                : secretPartRepository.findPart(key, version);
         if (part.isEmpty()) {
             throw new SecretNotFoundException();
         }

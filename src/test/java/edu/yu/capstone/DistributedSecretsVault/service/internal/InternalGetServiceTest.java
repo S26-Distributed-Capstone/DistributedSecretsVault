@@ -21,13 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
-public class GetShardServiceTest {
+public class InternalGetServiceTest {
 
     @Mock
     private SecretPartRepository secretPartRepository;
 
     @InjectMocks
-    private GetShardService getShardService;
+    private InternalGetService internalGetService;
 
     private SecretKey validKey;
 
@@ -43,7 +43,7 @@ public class GetShardServiceTest {
         when(secretPartRepository.exists(validKey)).thenReturn(true);
         when(secretPartRepository.findPart(validKey, 1L)).thenReturn(Optional.of(part));
 
-        ResponseEntity<SecretPart> response = getShardService.getVersion("user1", "secret1", 1L);
+        ResponseEntity<SecretPart> response = internalGetService.getVersion("user1", "secret1", 1L);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(part, response.getBody());
@@ -55,7 +55,7 @@ public class GetShardServiceTest {
         when(secretPartRepository.exists(validKey)).thenReturn(true);
         when(secretPartRepository.findLatest(validKey)).thenReturn(Optional.of(part));
 
-        ResponseEntity<SecretPart> response = getShardService.getVersion("user1", "secret1", null);
+        ResponseEntity<SecretPart> response = internalGetService.getVersion("user1", "secret1", null);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(part, response.getBody());
@@ -65,7 +65,7 @@ public class GetShardServiceTest {
     void testGetVersion_KeyDoesNotExist() {
         when(secretPartRepository.exists(validKey)).thenReturn(false);
 
-        assertThrows(SecretNotFoundException.class, () -> getShardService.getVersion("user1", "secret1", 1L));
+        assertThrows(SecretNotFoundException.class, () -> internalGetService.getVersion("user1", "secret1", 1L));
     }
 
     @Test
@@ -73,19 +73,19 @@ public class GetShardServiceTest {
         when(secretPartRepository.exists(validKey)).thenReturn(true);
         when(secretPartRepository.findPart(validKey, 1L)).thenReturn(Optional.empty());
 
-        assertThrows(SecretNotFoundException.class, () -> getShardService.getVersion("user1", "secret1", 1L));
+        assertThrows(SecretNotFoundException.class, () -> internalGetService.getVersion("user1", "secret1", 1L));
     }
 
     @Test
     void testGetVersion_InvalidUser() {
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getVersion(null, "secret1", 1L));
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getVersion("   ", "secret1", 1L));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getVersion(null, "secret1", 1L));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getVersion("   ", "secret1", 1L));
     }
 
     @Test
     void testGetVersion_InvalidSecretName() {
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getVersion("user1", null, 1L));
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getVersion("user1", "   ", 1L));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getVersion("user1", null, 1L));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getVersion("user1", "   ", 1L));
     }
 
     @Test
@@ -96,7 +96,7 @@ public class GetShardServiceTest {
         when(secretPartRepository.findPart(validKey, 1L)).thenReturn(Optional.of(part1));
         when(secretPartRepository.findPart(validKey, 2L)).thenReturn(Optional.of(part2));
 
-        ResponseEntity<Map<Long, SecretPart>> response = getShardService.getAllVersions("user1", "secret1");
+        ResponseEntity<Map<Long, SecretPart>> response = internalGetService.getAllVersions("user1", "secret1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         Map<Long, SecretPart> results = response.getBody();
@@ -109,7 +109,7 @@ public class GetShardServiceTest {
     void testGetAllVersions_NoVersionsFound() {
         when(secretPartRepository.listVersions(validKey)).thenReturn(List.of());
 
-        assertThrows(SecretNotFoundException.class, () -> getShardService.getAllVersions("user1", "secret1"));
+        assertThrows(SecretNotFoundException.class, () -> internalGetService.getAllVersions("user1", "secret1"));
     }
 
     @Test
@@ -117,18 +117,18 @@ public class GetShardServiceTest {
         when(secretPartRepository.listVersions(validKey)).thenReturn(Arrays.asList(1L));
         when(secretPartRepository.findPart(validKey, 1L)).thenReturn(Optional.empty());
 
-        assertThrows(SecretNotFoundException.class, () -> getShardService.getAllVersions("user1", "secret1"));
+        assertThrows(SecretNotFoundException.class, () -> internalGetService.getAllVersions("user1", "secret1"));
     }
 
     @Test
     void testGetAllVersions_InvalidUser() {
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getAllVersions(null, "secret1"));
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getAllVersions("   ", "secret1"));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getAllVersions(null, "secret1"));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getAllVersions("   ", "secret1"));
     }
 
     @Test
     void testGetAllVersions_InvalidSecretName() {
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getAllVersions("user1", null));
-        assertThrows(IllegalArgumentException.class, () -> getShardService.getAllVersions("user1", "   "));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getAllVersions("user1", null));
+        assertThrows(IllegalArgumentException.class, () -> internalGetService.getAllVersions("user1", "   "));
     }
 }
