@@ -13,7 +13,6 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.GiveShardService
 import java.util.Map;
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,11 +25,10 @@ public class InternalController {
     private final DeletePrepareHandler deletePrepareHandler;
     private final DeleteCommitHandler deleteCommitHandler;
 
-    @Autowired
     public InternalController(GetShardService getShardService,
-                              GiveShardService giveShardService,
-                              DeletePrepareHandler deletePrepareHandler,
-                              DeleteCommitHandler deleteCommitHandler) {
+            GiveShardService giveShardService,
+            DeletePrepareHandler deletePrepareHandler,
+            DeleteCommitHandler deleteCommitHandler) {
         this.getShardService = getShardService;
         this.giveShardService = giveShardService;
         this.deletePrepareHandler = deletePrepareHandler;
