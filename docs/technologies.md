@@ -111,6 +111,16 @@
 
 ---
 
+## Apache Kafka 3.7.0 (Future Integration)
+
+**Why we chose it:** Kafka will provide a persistent, strictly ordered commit log to serve as a distributed queue. We will use Kafka topics to reliably order concurrent mutations (Create, Update, Delete) to the same secret key across multiple nodes, thus establishing a foundation for race-condition tie-breaking in our Two-Phase Commit (2PC) coordinate logic. This prevents using ad-hoc table locks.
+
+**Alternatives considered:**
+- **Redis distributed locks:** Could solve concurrency races, but Kafka guarantees strict event ordering natively without risking deadlocks from crashed nodes holding locks.
+- **RDBMS locking:** We want to minimize PostgreSQL serialization load.
+
+---
+
 ## Eclipse Temurin 25 (Docker base image)
 
 **Why we chose it:** Eclipse Temurin is the Adoptium (formerly AdoptOpenJDK) distribution of OpenJDK. It is free, regularly patched, and widely recommended as the default JDK image for production Docker containers.

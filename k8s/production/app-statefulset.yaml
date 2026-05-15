@@ -76,6 +76,8 @@ spec:
                   name: dsv-secrets
                   key: POSTGRES_PASSWORD
                   optional: true
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka.default.svc.cluster.local:9092"
         # Redis Sidecar container within the same Pod
         - name: redis-sidecar
           image: redis:8.6-alpine

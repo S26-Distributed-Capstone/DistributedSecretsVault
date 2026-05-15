@@ -1,9 +1,9 @@
 package edu.yu.capstone.DistributedSecretsVault.service.secret;
 
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -50,7 +50,7 @@ public class SecretService {
             part.setVersion(version);
             secretPartRepository.savePart(part); // split to the other nodes
         }
-        return buildSecretVersion(key, version);
+        return new SecretVersion(key, version, System.currentTimeMillis());
     }
 
     public SecretVersion updateSecret(SecretKey key, String value) {
@@ -71,7 +71,7 @@ public class SecretService {
                 throw new SecretNotFoundException();
             }
         }
-        return buildSecretVersion(key, version);
+        return new SecretVersion(key, version, System.currentTimeMillis());
     }
 
     public String getSecret(SecretKey key, Long version) {
@@ -80,15 +80,11 @@ public class SecretService {
             throw new SecretNotFoundException();
         }
         long resolvedVersion = resolveVersion(key, version);
-        List<SecretPart> parts = secretPartRepository.findParts(key, resolvedVersion);
-        int threshold = resolveThreshold(resolveTotalParts());
-        if (parts.size() < threshold) {
+        Optional<SecretPart> part = secretPartRepository.findPart(key, resolvedVersion);
+        if (part.isEmpty()) {
             throw new InsufficientShardsException();
         }
-        List<SecretPart> selected = parts.stream()
-                .sorted(Comparator.comparingInt(SecretPart::getPartIndex))
-                .limit(threshold)
-                .toList();
+        List<SecretPart> selected = part.stream().toList();
         return secretReconstructionService.reconstruct(selected);
     }
 
@@ -98,17 +94,13 @@ public class SecretService {
         if (versions.isEmpty()) {
             throw new SecretNotFoundException();
         }
-        int threshold = resolveThreshold(resolveTotalParts());
         Map<Long, String> results = new LinkedHashMap<>();
         versions.stream().sorted().forEach(version -> {
-            List<SecretPart> parts = secretPartRepository.findParts(key, version);
-            if (parts.size() < threshold) {
+            Optional<SecretPart> part = secretPartRepository.findPart(key, version);
+            if (part.isEmpty()) {
                 throw new InsufficientShardsException();
             }
-            List<SecretPart> selected = parts.stream()
-                    .sorted(Comparator.comparingInt(SecretPart::getPartIndex))
-                    .limit(threshold)
-                    .toList();
+            List<SecretPart> selected = part.stream().toList();
             results.put(version, secretReconstructionService.reconstruct(selected));
         });
         return results;
@@ -126,14 +118,6 @@ public class SecretService {
         if (key == null || key.getName() == null || key.getName().isBlank()) {
             throw new IllegalArgumentException("Secret key is required");
         }
-    }
-
-    private SecretVersion buildSecretVersion(SecretKey key, long version) {
-        SecretVersion secretVersion = new SecretVersion();
-        secretVersion.setKey(key);
-        secretVersion.setVersion(version);
-        secretVersion.setTimestampMillis(System.currentTimeMillis());
-        return secretVersion;
     }
 
     private long resolveVersion(SecretKey key, Long requestedVersion) {
