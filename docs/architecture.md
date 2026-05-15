@@ -25,10 +25,10 @@ graph LR
 
 ---
 
-2. New user signs up
+2. User identity
 
-- User signs up through the gateway using OAuth2-compatible credentials.
-- Credentials and account records are stored in PostgreSQL only.
+- User identity and authentication are outside the current DSV backend runtime.
+- The vault service stores and retrieves secret shards; it no longer depends on a relational database.
 
 ---
 

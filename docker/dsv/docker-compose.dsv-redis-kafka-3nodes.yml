@@ -1,11 +1,6 @@
-# Same stack as docker-compose.dsv-redis-postgresql.yml but three DSV app instances.
-# Use this file OR the single-app compose file, not both (same project name and infra container names).
-#
-# Each app has a distinct NODE_NAME so Kafka consumer groups differ — every instance receives
-# the full secrets-commit topic (see application.properties spring.kafka.consumer.group-id).
-#
+# Same stack as docker-compose.dsv-redis-kafka.yml but with three DSV app instances.
 # HTTP: localhost:8081 (app1), :8082 (app2), :8083 (app3)
-name: "Distributed Secrets Vault + Redis + PostgreSQL"
+name: "Distributed Secrets Vault + Redis + Kafka"
 
 services:
   redis:
@@ -20,26 +15,6 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - dsv-network
-
-  postgres:
-    image: postgres:18.2-alpine
-    container_name: dsv-postgres
-    ports:
-      - "5432:5432"
-    environment:
-      - LANG=C.UTF-8
-      - POSTGRES_USER=${POSTGRES_USER:-dsv}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB:-dsv}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
-      interval: 5s
       timeout: 3s
       retries: 5
     networks:
@@ -92,15 +67,10 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dsv}
-      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-dsv}
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-POSTGRES_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SEED_DNS_HOST=localhost
     depends_on:
       redis:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -120,15 +90,10 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dsv}
-      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-dsv}
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-POSTGRES_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SEED_DNS_HOST=localhost
     depends_on:
       redis:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -148,15 +113,10 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-dsv}
-      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-dsv}
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-POSTGRES_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SEED_DNS_HOST=localhost
     depends_on:
       redis:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -165,7 +125,6 @@ services:
 
 volumes:
   redis-data:
-  postgres-data:
   kafka-data:
 
 networks:

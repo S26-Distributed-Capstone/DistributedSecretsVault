@@ -18,6 +18,7 @@ spec:
       containers:
         - name: dsv-app
           image: dsv-backend:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 4801
               name: cluster
@@ -42,23 +43,10 @@ spec:
               value: "localhost"
             - name: SPRING_DATA_REDIS_PORT
               value: "6379"
+            - name: SPRING_DATA_REDIS_PASSWORD
+              value: ""
             - name: SPRING_PROFILES_ACTIVE
-              value: "prod"
-            # Postgres connection via the postgres primary service
-            - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres-0.postgres-headless.default.svc.cluster.local:5432/dsv"
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: dsv-secrets
-                  key: POSTGRES_USER
-                  optional: true
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: dsv-secrets
-                  key: POSTGRES_PASSWORD
-                  optional: true
+              value: "dev"
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "kafka.default.svc.cluster.local:9092"
         # Redis Sidecar container within the same Pod
