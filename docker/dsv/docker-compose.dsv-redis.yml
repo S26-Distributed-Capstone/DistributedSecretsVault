@@ -15,7 +15,7 @@ services:
       - redis-data:/var/lib/redis
       - ../redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-REDIS_PASSWORD}\" ping"]
       interval: 10s
       timeout: 3s
       retries: 5
