@@ -77,6 +77,21 @@ public class ShamirSecretSharingTest {
         assertArrayEquals(secret, reconstructed);
     }
 
+    @Test
+    void testReconstructFromNonContiguousShardIndexes() {
+        byte[] secret = "non-contiguous-shards".getBytes(StandardCharsets.UTF_8);
+
+        Map<Integer, byte[]> parts = shamir.split(secret, 5, 3);
+        Map<Integer, byte[]> subset = Map.of(
+                2, parts.get(2),
+                4, parts.get(4),
+                5, parts.get(5));
+
+        byte[] reconstructed = shamir.reconstruct(subset);
+
+        assertArrayEquals(secret, reconstructed);
+    }
+
     // ── Threshold = 1 (raw copies) ──────────────────────────────────────
 
     @Test

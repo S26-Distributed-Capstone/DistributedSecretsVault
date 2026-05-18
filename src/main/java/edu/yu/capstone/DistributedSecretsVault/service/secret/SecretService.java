@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeSet;
 
 import org.springframework.stereotype.Service;
 
@@ -15,21 +16,27 @@ import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretExcepti
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartResponse;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartsResponse;
 
 @Service
 public class SecretService {
     private final SecretPartRepository secretPartRepository;
     private final SecretSharingService secretSharingService;
     private final SecretReconstructionService secretReconstructionService;
+    private final NodeClient nodeClient;
     private final ClusterConfig clusterConfig;
 
     public SecretService(SecretPartRepository secretPartRepository,
             SecretSharingService secretSharingService,
             SecretReconstructionService secretReconstructionService,
+            NodeClient nodeClient,
             ClusterConfig clusterConfig) {
         this.secretPartRepository = secretPartRepository;
         this.secretSharingService = secretSharingService;
         this.secretReconstructionService = secretReconstructionService;
+        this.nodeClient = nodeClient;
         this.clusterConfig = clusterConfig;
     }
 
@@ -75,31 +82,19 @@ public class SecretService {
 
     public String getSecret(SecretKey key, Long version) {
         validateKey(key);
-        if (!secretPartRepository.exists(key)) {
-            throw new SecretNotFoundException();
-        }
-        long resolvedVersion = resolveVersion(key, version);
-        Optional<SecretPart> part = secretPartRepository.findPart(key, resolvedVersion);
-        if (part.isEmpty()) {
-            throw new InsufficientShardsException();
-        }
-        List<SecretPart> selected = part.stream().toList();
+        List<SecretPart> selected = collectPartsForReconstruction(key, version);
         return secretReconstructionService.reconstruct(selected);
     }
 
     public Map<Long, String> getAllVersions(SecretKey key) {
         validateKey(key);
-        List<Long> versions = secretPartRepository.listVersions(key);
-        if (versions.isEmpty()) {
+        Map<Long, Map<Integer, SecretPart>> partsByVersion = collectAllPartsByVersion(key);
+        if (partsByVersion.isEmpty()) {
             throw new SecretNotFoundException();
         }
         Map<Long, String> results = new LinkedHashMap<>();
-        versions.stream().sorted().forEach(version -> {
-            Optional<SecretPart> part = secretPartRepository.findPart(key, version);
-            if (part.isEmpty()) {
-                throw new InsufficientShardsException();
-            }
-            List<SecretPart> selected = part.stream().toList();
+        partsByVersion.keySet().stream().sorted().forEach(version -> {
+            List<SecretPart> selected = requireThreshold(partsByVersion.get(version));
             results.put(version, secretReconstructionService.reconstruct(selected));
         });
         return results;
@@ -119,27 +114,90 @@ public class SecretService {
         }
     }
 
-    private long resolveVersion(SecretKey key, Long requestedVersion) {
-        if (requestedVersion != null) {
-            List<Long> versions = secretPartRepository.listVersions(key);
-            if (!versions.contains(requestedVersion)) {
-                throw new SecretNotFoundException();
-            }
-            return requestedVersion;
-        }
-        return latestVersion(key);
-    }
-
-    private long latestVersion(SecretKey key) {
-        return secretPartRepository.findLatest(key)
-                .map(SecretPart::getVersion)
-                .orElseThrow(SecretNotFoundException::new);
-    }
-
     private long nextVersion(SecretKey key) {
         return secretPartRepository.findLatest(key)
                 .map(part -> part.getVersion() + 1L)
                 .orElse(1L);
+    }
+
+    private List<SecretPart> collectPartsForReconstruction(SecretKey key, Long requestedVersion) {
+        Map<Long, Map<Integer, SecretPart>> partsByVersion = new LinkedHashMap<>();
+        addLocalPart(partsByVersion, key, requestedVersion);
+
+        for (String peerUrl : resolvePeerUrls()) {
+            SecretPartResponse response = nodeClient.fetchSecretPart(peerUrl, key, requestedVersion);
+            if (response != null && response.found()) {
+                addPart(partsByVersion, response.part());
+            }
+        }
+
+        if (partsByVersion.isEmpty()) {
+            throw new SecretNotFoundException();
+        }
+
+        long resolvedVersion = requestedVersion == null
+                ? partsByVersion.keySet().stream().mapToLong(Long::longValue).max()
+                        .orElseThrow(SecretNotFoundException::new)
+                : requestedVersion;
+
+        Map<Integer, SecretPart> selectedParts = partsByVersion.get(resolvedVersion);
+        if (selectedParts == null || selectedParts.isEmpty()) {
+            throw new SecretNotFoundException();
+        }
+        return requireThreshold(selectedParts);
+    }
+
+    private Map<Long, Map<Integer, SecretPart>> collectAllPartsByVersion(SecretKey key) {
+        Map<Long, Map<Integer, SecretPart>> partsByVersion = new LinkedHashMap<>();
+        addLocalVersionParts(partsByVersion, key);
+
+        for (String peerUrl : resolvePeerUrls()) {
+            SecretPartsResponse response = nodeClient.fetchAllSecretParts(peerUrl, key);
+            if (response != null && response.found()) {
+                response.parts().values().forEach(part -> addPart(partsByVersion, part));
+            }
+        }
+        return partsByVersion;
+    }
+
+    private void addLocalPart(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key, Long requestedVersion) {
+        Optional<SecretPart> localPart = requestedVersion == null
+                ? secretPartRepository.findLatest(key)
+                : secretPartRepository.findPart(key, requestedVersion);
+        localPart.ifPresent(part -> addPart(partsByVersion, part));
+    }
+
+    private void addLocalVersionParts(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key) {
+        for (Long version : secretPartRepository.listVersions(key)) {
+            secretPartRepository.findPart(key, version)
+                    .ifPresent(part -> addPart(partsByVersion, part));
+        }
+    }
+
+    private void addPart(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretPart part) {
+        if (part == null || part.getVersion() == null || part.getShard() == null) {
+            return;
+        }
+        partsByVersion.computeIfAbsent(part.getVersion(), ignored -> new LinkedHashMap<>())
+                .putIfAbsent(part.getPartIndex(), part);
+    }
+
+    private List<SecretPart> requireThreshold(Map<Integer, SecretPart> partsByIndex) {
+        if (partsByIndex == null || partsByIndex.isEmpty()) {
+            throw new SecretNotFoundException();
+        }
+        int threshold = resolveThreshold(resolveTotalParts());
+        if (partsByIndex.size() < threshold) {
+            throw new InsufficientShardsException();
+        }
+        return new TreeSet<>(partsByIndex.keySet()).stream()
+                .limit(threshold)
+                .map(partsByIndex::get)
+                .toList();
+    }
+
+    private List<String> resolvePeerUrls() {
+        return nodeClient == null ? List.of() : nodeClient.resolvePeerUrls();
     }
 
     private int resolveTotalParts() {

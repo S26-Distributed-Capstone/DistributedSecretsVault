@@ -35,8 +35,11 @@ public class ShamirSecretSharing {
         if (parts.size() == 1) {
             return parts.values().iterator().next();
         }
-        int size = parts.size();
-        Scheme scheme = new Scheme(new SecureRandom(), size, size);
+        int totalParts = parts.keySet().stream()
+                .mapToInt(Integer::intValue)
+                .max()
+                .orElseThrow(() -> new IllegalArgumentException("Secret parts are required"));
+        Scheme scheme = new Scheme(new SecureRandom(), totalParts, parts.size());
         return scheme.join(parts);
     }
 }

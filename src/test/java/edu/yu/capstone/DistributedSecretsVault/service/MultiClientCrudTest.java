@@ -21,6 +21,9 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartResponse;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartsResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretReconstructionService;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretService;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretSharingService;
@@ -43,6 +46,9 @@ public class MultiClientCrudTest {
         @Mock
         private SecretReconstructionService secretReconstructionService;
 
+        @Mock
+        private NodeClient nodeClient;
+
         private ClusterConfig clusterConfig;
         private SecretService service;
 
@@ -52,7 +58,8 @@ public class MultiClientCrudTest {
                 clusterConfig.setTotalNodes(3);
                 clusterConfig.setThresholdK(2);
                 service = new SecretService(secretPartRepository, secretSharingService,
-                                secretReconstructionService, clusterConfig);
+                                secretReconstructionService, nodeClient, clusterConfig);
+                lenient().when(nodeClient.resolvePeerUrls()).thenReturn(List.of());
         }
 
         // ── Two users, different keys ───────────────────────────────────────
@@ -117,10 +124,8 @@ public class MultiClientCrudTest {
                 SecretKey bobQueryForAlice = new SecretKey("bob", "db-password");
 
                 // Simulate that Alice has successfully stored this secret
-                lenient().when(secretPartRepository.exists(aliceKey)).thenReturn(true);
-                
                 // Bob's query uses a different SecretKey (due to ownerId), so it should not resolve to Alice's
-                when(secretPartRepository.exists(bobQueryForAlice)).thenReturn(false);
+                when(secretPartRepository.findLatest(bobQueryForAlice)).thenReturn(Optional.empty());
 
                 assertThrows(SecretNotFoundException.class,
                                 () -> service.getSecret(bobQueryForAlice, null));
@@ -150,8 +155,11 @@ public class MultiClientCrudTest {
                 // -- Alice: read back
                 when(secretPartRepository.exists(aliceKey)).thenReturn(true);
                 SecretPart alicePart = new SecretPart(aliceKey, 1L, 1, new byte[] { 1 });
+                SecretPart alicePeerPart = new SecretPart(aliceKey, 1L, 2, new byte[] { 2 });
                 when(secretPartRepository.findLatest(aliceKey)).thenReturn(Optional.of(alicePart));
-                when(secretPartRepository.findPart(aliceKey, 1L)).thenReturn(Optional.of(alicePart));
+                when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+                when(nodeClient.fetchSecretPart("http://peer1:8080", aliceKey, null))
+                                .thenReturn(SecretPartResponse.found("http://peer1:8080", alicePeerPart));
                 when(secretReconstructionService.reconstruct(anyList())).thenReturn("alice-v1");
                 assertEquals("alice-v1", service.getSecret(aliceKey, null));
 
@@ -165,8 +173,13 @@ public class MultiClientCrudTest {
                 // -- Alice: get all versions
                 when(secretPartRepository.listVersions(aliceKey)).thenReturn(List.of(1L, 2L));
                 SecretPart alicePart2 = new SecretPart(aliceKey, 2L, 1, new byte[] { 2 });
+                SecretPart alicePeerPart2 = new SecretPart(aliceKey, 2L, 2, new byte[] { 3 });
                 when(secretPartRepository.findPart(aliceKey, 1L)).thenReturn(Optional.of(alicePart));
                 when(secretPartRepository.findPart(aliceKey, 2L)).thenReturn(Optional.of(alicePart2));
+                when(nodeClient.fetchAllSecretParts("http://peer1:8080", aliceKey))
+                                .thenReturn(SecretPartsResponse.found("http://peer1:8080", Map.of(
+                                                1L, alicePeerPart,
+                                                2L, alicePeerPart2)));
                 when(secretReconstructionService.reconstruct(anyList()))
                                 .thenReturn("alice-v1", "alice-v2");
                 Map<Long, String> allVersions = service.getAllVersions(aliceKey);
@@ -178,15 +191,18 @@ public class MultiClientCrudTest {
                 verify(secretPartRepository, never()).deleteParts(bobKey); // Verify Bob was untouched
 
                 // -- Alice: confirm gone
-                when(secretPartRepository.exists(aliceKey)).thenReturn(false);
+                when(secretPartRepository.findLatest(aliceKey)).thenReturn(Optional.empty());
+                when(nodeClient.fetchSecretPart("http://peer1:8080", aliceKey, null))
+                                .thenReturn(SecretPartResponse.rejected("http://peer1:8080", 404, "not found"));
                 assertThrows(SecretNotFoundException.class,
                                 () -> service.getSecret(aliceKey, null));
 
                 // -- Bob's secret should be unaffected
-                when(secretPartRepository.exists(bobKey)).thenReturn(true);
                 SecretPart bobPart = new SecretPart(bobKey, 1L, 1, new byte[] { 1 });
+                SecretPart bobPeerPart = new SecretPart(bobKey, 1L, 2, new byte[] { 2 });
                 when(secretPartRepository.findLatest(bobKey)).thenReturn(Optional.of(bobPart));
-                when(secretPartRepository.findPart(bobKey, 1L)).thenReturn(Optional.of(bobPart));
+                when(nodeClient.fetchSecretPart("http://peer1:8080", bobKey, null))
+                                .thenReturn(SecretPartResponse.found("http://peer1:8080", bobPeerPart));
                 when(secretReconstructionService.reconstruct(anyList())).thenReturn("bob-v1");
                 assertEquals("bob-v1", service.getSecret(bobKey, null));
         }

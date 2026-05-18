@@ -23,6 +23,9 @@ import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretExcepti
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InsufficientShardsException;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartResponse;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartsResponse;
 
 @ExtendWith(MockitoExtension.class)
 @Tag("unit")
@@ -37,6 +40,9 @@ public class SecretServiceTest {
     @Mock
     private SecretReconstructionService secretReconstructionService;
 
+    @Mock
+    private NodeClient nodeClient;
+
     private ClusterConfig clusterConfig;
     private SecretService service;
 
@@ -46,7 +52,8 @@ public class SecretServiceTest {
         clusterConfig.setTotalNodes(3);
         clusterConfig.setThresholdK(2);
         service = new SecretService(secretPartRepository, secretSharingService,
-                secretReconstructionService, clusterConfig);
+                secretReconstructionService, nodeClient, clusterConfig);
+        lenient().when(nodeClient.resolvePeerUrls()).thenReturn(List.of());
     }
 
     // ── Store (Create) ──────────────────────────────────────────────────
@@ -139,24 +146,29 @@ public class SecretServiceTest {
     @Test
     void testGetSecretLatestVersion() {
         SecretKey key = new SecretKey("user1", "db-password");
-        SecretPart part = new SecretPart(key, 2L, 1, new byte[]{1, 2});
-        when(secretPartRepository.exists(key)).thenReturn(true);
+        SecretPart part = new SecretPart(key, 2L, 1, new byte[] { 1, 2 });
+        SecretPart peerPart = new SecretPart(key, 2L, 2, new byte[] { 3, 4 });
         when(secretPartRepository.findLatest(key)).thenReturn(Optional.of(part));
-        when(secretPartRepository.findPart(key, 2L)).thenReturn(Optional.of(part));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", key, null))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart));
         when(secretReconstructionService.reconstruct(anyList())).thenReturn("reconstructed");
 
         String result = service.getSecret(key, null);
 
         assertEquals("reconstructed", result);
+        verify(secretReconstructionService).reconstruct(argThat(parts -> parts.size() == 2));
     }
 
     @Test
     void testGetSecretSpecificVersion() {
         SecretKey key = new SecretKey("user1", "db-password");
-        SecretPart part = new SecretPart(key, 1L, 1, new byte[]{1});
-        when(secretPartRepository.exists(key)).thenReturn(true);
-        when(secretPartRepository.listVersions(key)).thenReturn(List.of(1L, 2L));
+        SecretPart part = new SecretPart(key, 1L, 1, new byte[] { 1 });
+        SecretPart peerPart = new SecretPart(key, 1L, 2, new byte[] { 2 });
         when(secretPartRepository.findPart(key, 1L)).thenReturn(Optional.of(part));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", key, 1L))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart));
         when(secretReconstructionService.reconstruct(anyList())).thenReturn("v1-secret");
 
         String result = service.getSecret(key, 1L);
@@ -167,7 +179,6 @@ public class SecretServiceTest {
     @Test
     void testGetSecretRejectsNonExistentKey() {
         SecretKey key = new SecretKey("user1", "no-such-secret");
-        when(secretPartRepository.exists(key)).thenReturn(false);
 
         assertThrows(SecretNotFoundException.class,
                 () -> service.getSecret(key, null));
@@ -176,20 +187,17 @@ public class SecretServiceTest {
     @Test
     void testGetSecretRejectsNonExistentVersion() {
         SecretKey key = new SecretKey("user1", "db-password");
-        when(secretPartRepository.exists(key)).thenReturn(true);
-        when(secretPartRepository.listVersions(key)).thenReturn(List.of(1L));
+        when(secretPartRepository.findPart(key, 99L)).thenReturn(Optional.empty());
 
         assertThrows(SecretNotFoundException.class,
                 () -> service.getSecret(key, 99L));
     }
 
     @Test
-    void testGetSecretThrowsWhenNoShardFound() {
+    void testGetSecretThrowsWhenInsufficientShardsFound() {
         SecretKey key = new SecretKey("user1", "db-password");
-        when(secretPartRepository.exists(key)).thenReturn(true);
         when(secretPartRepository.findLatest(key))
-                .thenReturn(Optional.of(new SecretPart(key, 1L, 1, new byte[]{1})));
-        when(secretPartRepository.findPart(key, 1L)).thenReturn(Optional.empty());
+                .thenReturn(Optional.of(new SecretPart(key, 1L, 1, new byte[] { 1 })));
 
         assertThrows(InsufficientShardsException.class,
                 () -> service.getSecret(key, null));
@@ -200,11 +208,18 @@ public class SecretServiceTest {
     @Test
     void testGetAllVersionsReturnsSortedMap() {
         SecretKey key = new SecretKey("user1", "db-password");
-        SecretPart part1 = new SecretPart(key, 1L, 1, new byte[]{1});
-        SecretPart part2 = new SecretPart(key, 2L, 1, new byte[]{2});
+        SecretPart part1 = new SecretPart(key, 1L, 1, new byte[] { 1 });
+        SecretPart part2 = new SecretPart(key, 2L, 1, new byte[] { 2 });
+        SecretPart peerPart1 = new SecretPart(key, 1L, 2, new byte[] { 3 });
+        SecretPart peerPart2 = new SecretPart(key, 2L, 2, new byte[] { 4 });
         when(secretPartRepository.listVersions(key)).thenReturn(List.of(2L, 1L));
         when(secretPartRepository.findPart(key, 1L)).thenReturn(Optional.of(part1));
         when(secretPartRepository.findPart(key, 2L)).thenReturn(Optional.of(part2));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+        when(nodeClient.fetchAllSecretParts("http://peer1:8080", key))
+                .thenReturn(SecretPartsResponse.found("http://peer1:8080", Map.of(
+                        1L, peerPart1,
+                        2L, peerPart2)));
         when(secretReconstructionService.reconstruct(anyList()))
                 .thenReturn("v1-secret", "v2-secret");
 
@@ -253,7 +268,7 @@ public class SecretServiceTest {
     void testStoreSecretWithNullClusterConfig() {
         SecretService nullConfigService = new SecretService(
                 secretPartRepository, secretSharingService,
-                secretReconstructionService, null);
+                secretReconstructionService, nodeClient, null);
         SecretKey key = new SecretKey("user1", "db-password");
         when(secretPartRepository.exists(key)).thenReturn(false);
         // totalParts=1, threshold=1

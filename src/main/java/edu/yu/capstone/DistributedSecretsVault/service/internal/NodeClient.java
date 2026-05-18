@@ -3,15 +3,19 @@ package edu.yu.capstone.DistributedSecretsVault.service.internal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.core.ParameterizedTypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretKey;
+import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutPrepareRequest;
@@ -120,6 +124,60 @@ public class NodeClient {
         }
     }
 
+    public SecretPartResponse fetchSecretPart(String peerUrl, SecretKey key, Long version) {
+        try {
+            SecretPart part;
+            if (version == null) {
+                part = restClient.get()
+                        .uri(peerUrl + "/internal/{id}?user={user}", key.getName(), key.getOwnerId())
+                        .retrieve()
+                        .body(SecretPart.class);
+            } else {
+                part = restClient.get()
+                        .uri(peerUrl + "/internal/{id}?user={user}&version={version}",
+                                key.getName(), key.getOwnerId(), version)
+                        .retrieve()
+                        .body(SecretPart.class);
+            }
+            log.debug("Secret part received from {}", peerUrl);
+            return SecretPartResponse.found(peerUrl, part);
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().is4xxClientError()) {
+                log.debug("Secret part not available from {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            } else {
+                log.warn("Secret part fetch failed from {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            }
+            return SecretPartResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.warn("Failed to fetch secret part from {}: {}", peerUrl, ex.getMessage());
+            return SecretPartResponse.failed(peerUrl, ex.getMessage());
+        }
+    }
+
+    public SecretPartsResponse fetchAllSecretParts(String peerUrl, SecretKey key) {
+        try {
+            Map<Long, SecretPart> parts = restClient.get()
+                    .uri(peerUrl + "/internal/{id}/all?user={user}", key.getName(), key.getOwnerId())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<Map<Long, SecretPart>>() {
+                    });
+            log.debug("Secret version parts received from {}", peerUrl);
+            return SecretPartsResponse.found(peerUrl, parts == null ? Map.of() : parts);
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().is4xxClientError()) {
+                log.debug("Secret version parts not available from {} with HTTP {}",
+                        peerUrl, ex.getStatusCode().value());
+            } else {
+                log.warn("Secret version parts fetch failed from {} with HTTP {}",
+                        peerUrl, ex.getStatusCode().value());
+            }
+            return SecretPartsResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.warn("Failed to fetch secret version parts from {}: {}", peerUrl, ex.getMessage());
+            return SecretPartsResponse.failed(peerUrl, ex.getMessage());
+        }
+    }
+
     /**
      * Resolve peer node base URLs using ScaleCube's service discovery.
      * <p>
@@ -189,6 +247,43 @@ public class NodeClient {
 
         public static PeerResponse failed(String peerUrl, String errorMessage) {
             return new PeerResponse(peerUrl, false, null, errorMessage);
+        }
+    }
+
+    public record SecretPartResponse(String peerUrl, SecretPart part, Integer statusCode, String errorMessage) {
+        public boolean found() {
+            return part != null;
+        }
+
+        public static SecretPartResponse found(String peerUrl, SecretPart part) {
+            return new SecretPartResponse(peerUrl, part, null, null);
+        }
+
+        public static SecretPartResponse rejected(String peerUrl, int statusCode, String errorMessage) {
+            return new SecretPartResponse(peerUrl, null, statusCode, errorMessage);
+        }
+
+        public static SecretPartResponse failed(String peerUrl, String errorMessage) {
+            return new SecretPartResponse(peerUrl, null, null, errorMessage);
+        }
+    }
+
+    public record SecretPartsResponse(String peerUrl, Map<Long, SecretPart> parts, Integer statusCode,
+            String errorMessage) {
+        public boolean found() {
+            return parts != null && !parts.isEmpty();
+        }
+
+        public static SecretPartsResponse found(String peerUrl, Map<Long, SecretPart> parts) {
+            return new SecretPartsResponse(peerUrl, parts, null, null);
+        }
+
+        public static SecretPartsResponse rejected(String peerUrl, int statusCode, String errorMessage) {
+            return new SecretPartsResponse(peerUrl, null, statusCode, errorMessage);
+        }
+
+        public static SecretPartsResponse failed(String peerUrl, String errorMessage) {
+            return new SecretPartsResponse(peerUrl, null, null, errorMessage);
         }
     }
 }

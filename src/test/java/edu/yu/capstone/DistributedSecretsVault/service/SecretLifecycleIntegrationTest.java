@@ -21,6 +21,9 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartResponse;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartsResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretReconstructionService;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretService;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretSharingService;
@@ -42,6 +45,9 @@ public class SecretLifecycleIntegrationTest {
     @Mock
     private SecretReconstructionService secretReconstructionService;
 
+    @Mock
+    private NodeClient nodeClient;
+
     private ClusterConfig clusterConfig;
     private SecretService service;
     private SecretKey key;
@@ -52,7 +58,8 @@ public class SecretLifecycleIntegrationTest {
         clusterConfig.setTotalNodes(3);
         clusterConfig.setThresholdK(2);
         service = new SecretService(secretPartRepository, secretSharingService,
-                secretReconstructionService, clusterConfig);
+                secretReconstructionService, nodeClient, clusterConfig);
+        lenient().when(nodeClient.resolvePeerUrls()).thenReturn(List.of());
         key = new SecretKey("alice", "db-password");
     }
 
@@ -72,8 +79,11 @@ public class SecretLifecycleIntegrationTest {
         // ── Step 2: Read back (latest) ──────────────────────────────────
         when(secretPartRepository.exists(key)).thenReturn(true);
         SecretPart part1 = new SecretPart(key, 1L, 1, new byte[]{10, 20});
+        SecretPart peerPart1 = new SecretPart(key, 1L, 2, new byte[]{21, 22});
         when(secretPartRepository.findLatest(key)).thenReturn(Optional.of(part1));
-        when(secretPartRepository.findPart(key, 1L)).thenReturn(Optional.of(part1));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", key, null))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart1));
         when(secretReconstructionService.reconstruct(anyList())).thenReturn("original-password");
 
         String readBack = service.getSecret(key, null);
@@ -92,6 +102,8 @@ public class SecretLifecycleIntegrationTest {
         // ── Step 4: Read specific version 1 ─────────────────────────────
         when(secretPartRepository.listVersions(key)).thenReturn(List.of(1L, 2L));
         when(secretPartRepository.findPart(key, 1L)).thenReturn(Optional.of(part1));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", key, 1L))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart1));
         when(secretReconstructionService.reconstruct(anyList())).thenReturn("original-password");
 
         String v1Read = service.getSecret(key, 1L);
@@ -100,8 +112,10 @@ public class SecretLifecycleIntegrationTest {
 
         // ── Step 5: Read latest (should be version 2) ───────────────────
         SecretPart part2 = new SecretPart(key, 2L, 1, new byte[]{30, 40});
+        SecretPart peerPart2 = new SecretPart(key, 2L, 2, new byte[]{41, 42});
         when(secretPartRepository.findLatest(key)).thenReturn(Optional.of(part2));
-        when(secretPartRepository.findPart(key, 2L)).thenReturn(Optional.of(part2));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", key, null))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart2));
         when(secretReconstructionService.reconstruct(anyList())).thenReturn("new-password");
 
         String latestRead = service.getSecret(key, null);
@@ -111,6 +125,10 @@ public class SecretLifecycleIntegrationTest {
         // ── Step 6: Read all versions ───────────────────────────────────
         when(secretPartRepository.findPart(key, 1L)).thenReturn(Optional.of(part1));
         when(secretPartRepository.findPart(key, 2L)).thenReturn(Optional.of(part2));
+        when(nodeClient.fetchAllSecretParts("http://peer1:8080", key))
+                .thenReturn(SecretPartsResponse.found("http://peer1:8080", Map.of(
+                        1L, peerPart1,
+                        2L, peerPart2)));
         when(secretReconstructionService.reconstruct(anyList()))
                 .thenReturn("original-password", "new-password");
 
@@ -127,6 +145,9 @@ public class SecretLifecycleIntegrationTest {
 
         // ── Step 8: Read after delete → not found ───────────────────────
         when(secretPartRepository.exists(key)).thenReturn(false);
+        when(secretPartRepository.findLatest(key)).thenReturn(Optional.empty());
+        when(nodeClient.fetchSecretPart("http://peer1:8080", key, null))
+                .thenReturn(SecretPartResponse.rejected("http://peer1:8080", 404, "not found"));
 
         assertThrows(SecretNotFoundException.class,
                 () -> service.getSecret(key, null));
