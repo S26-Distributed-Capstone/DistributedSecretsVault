@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start three DSV instances (see docker/dsv/docker-compose.dsv-redis-postgresql-3nodes.yml),
+# Start three DSV instances (see docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml),
 # trigger one commit from app1, and verify all three JVMs log CommitListener for that transaction.
 #
 # If curl fails with "Recv failure: Connection reset by peer" (56): the JVM may still be
@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-COMPOSE_FILE="docker/dsv/docker-compose.dsv-redis-postgresql-3nodes.yml"
+COMPOSE_FILE="docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml"
 APPS=(dsv-app-1 dsv-app-2 dsv-app-3)
 # 127.0.0.1 avoids WSL/Docker Desktop localhost (::1) edge cases
 PUBLISH_URL="${PUBLISH_URL:-http://127.0.0.1:8081}"

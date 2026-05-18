@@ -1,190 +1,111 @@
 # Docker Configuration
 
-This directory contains all Docker-related configuration for the Distributed Secrets Vault.
+This directory contains Docker configuration for the Distributed Secrets Vault.
 
 ## Structure
 
-```
+```text
 docker/
 ├── dsv/
 │   ├── docker-compose.dsv.yml                    # App only
 │   ├── docker-compose.dsv-redis.yml              # App + Redis
-│   ├── docker-compose.dsv-postgresql.yml         # App + PostgreSQL
-│   ├── docker-compose.dsv-redis-postgresql.yml   # App + Redis + PostgreSQL + Kafka (single app)
-│   └── docker-compose.dsv-redis-postgresql-3nodes.yml # Same stack, three DSV app instances (Kafka fanout test)
+│   ├── docker-compose.dsv-redis-kafka.yml        # App + Redis + Kafka
+│   └── docker-compose.dsv-redis-kafka-3nodes.yml # Three DSV app instances
 ├── redis/
 │   ├── docker-compose.redis.yml                  # Redis only
 │   └── redis.conf                                # Redis persistence and security config
 ├── kafka/
-│   └── docker-compose.kafka.yml                  # Kafka only (KRaft mode)
-├── postgresql/
-│   ├── docker-compose.postgresql.yml             # PostgreSQL only (development, single node)
-│   ├── docker-compose.postgresql-production.yml  # Production: primary + 2 standbys
-│   ├── postgresql.conf                           # Production replication config (used by production compose)
-│   └── scripts/
-│       ├── init-primary.sh                       # Creates replication user (production primary)
-│       └── replica-entrypoint.sh                 # Bootstrap standbys from primary (production)
-└── README.md                                     # This file
+│   └── docker-compose.kafka.yml                  # Kafka only, KRaft mode
+└── README.md
+```
 
 Project root:
-├── .env.example                                  # Environment variable template
-├── .env                                          # Your local config (gitignored)
-└── scripts/test-three-dsv-kafka-nodes.sh         # Builds, starts 3-node stack, curls temp Kafka endpoint, checks logs
+
+```text
+.env.example                              # Environment variable template
+.env                                      # Local config, gitignored
+scripts/test-three-dsv-kafka-nodes.sh     # Builds and verifies the 3-node Kafka fanout stack
 ```
 
 ## Setup
 
-1. **Create environment file in project root:**
+Create a local environment file from the project root:
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+cp .env.example .env
+```
 
-2. **Set required values in `.env`** (recommended; otherwise dev compose uses defaults):
+Set a Redis password for any real local use:
 
-   ```env
-   REDIS_PASSWORD=your-secure-password-here
-   POSTGRES_PASSWORD=your-postgres-password-here
-   ```
+```env
+REDIS_PASSWORD=your-secure-password-here
+SPRING_PROFILES_ACTIVE=dev
+```
 
-   If you skip `.env`, the **development** compose files use the same defaults as `.env.example` (`REDIS_PASSWORD`, `POSTGRES_PASSWORD`). Set stronger values in `.env` for any real use. Optionally set `POSTGRES_USER` and `POSTGRES_DB` (defaults: `dsv`).
+Build and start the Redis + Kafka stack:
 
-3. **Build and start from project root:**
+```bash
+./mvnw clean package -DskipTests
+mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml up --build
+```
 
-   ```bash
-   ./mvnw clean package
-   mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-   docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
-   ```
+The API listens on `http://localhost:8080`.
 
-   When you run `docker compose` from the project root (as in the commands below), Compose loads `.env` from the project root.
+## Three App Nodes
 
-   **Other compose files:**
-   - App only: `docker compose -f docker/dsv/docker-compose.dsv.yml up --build`
-   - App + Redis: `docker compose -f docker/dsv/docker-compose.dsv-redis.yml up --build`
-   - App + PostgreSQL: `docker compose -f docker/dsv/docker-compose.dsv-postgresql.yml up --build`
+For local cluster-like testing, run three DSV app instances against the same Redis and Kafka services:
 
-   **Three DSV instances (Kafka commit fanout):** do not run this at the same time as the single-app stack on the same machine (shared container names `dsv-redis`, `dsv-postgres`, `dsv-kafka`, and host ports). Stop the other stack first (`docker compose … down`).
+```bash
+./mvnw clean package -DskipTests
+mkdir -p target/dependency && (cd target/dependency && jar -xf ../*.jar)
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml up -d --build
+```
 
-   ```bash
-   ./mvnw clean package -DskipTests
-   mkdir -p target/dependency && (cd target/dependency && jar -xf ../*.jar)
-   docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql-3nodes.yml up -d --build
-   ```
+Apps listen on `8081`, `8082`, and `8083`. Each instance sets a different `NODE_NAME` so Kafka consumer groups differ and every node receives `secrets-commit` messages.
 
-   Apps listen on **8081**, **8082**, and **8083** (mapped to container port 8080). Each instance sets a different `NODE_NAME` so Kafka consumer groups differ and every node receives `secrets-commit` messages.
+Automated check:
 
-   Automated check (build, start, publish once from app1, assert all three containers logged the commit):
+```bash
+./scripts/test-three-dsv-kafka-nodes.sh
+```
 
-   ```bash
-   ./scripts/test-three-dsv-kafka-nodes.sh
-   ```
+Manual check:
 
-   Manual check after the stack is healthy (prefer **`127.0.0.1`** on WSL2 / Docker Desktop if `localhost` gives `Connection reset by peer`):
-
-   ```bash
-   curl -sS http://127.0.0.1:8081/api/temp-test/kafka
-   docker logs dsv-app-1 2>&1 | grep -i "Received commit" | tail -3
-   docker logs dsv-app-2 2>&1 | grep -i "Received commit" | tail -3
-   docker logs dsv-app-3 2>&1 | grep -i "Received commit" | tail -3
-   ```
-
-## Environment Variables
-
-| Variable                        | Description                       | Default                                                   |
-| ------------------------------- | --------------------------------- | --------------------------------------------------------- |
-| `REDIS_PASSWORD`                | Redis authentication password     | Placeholder in `.env.example`; set in `.env` for real use |
-| `POSTGRES_USER`                 | PostgreSQL user                   | `dsv`                                                     |
-| `POSTGRES_PASSWORD`             | PostgreSQL password (required)    | Placeholder in `.env.example`; set in `.env` for real use |
-| `POSTGRES_DB`                   | PostgreSQL database name          | `dsv`                                                     |
-| `POSTGRES_REPLICATION_USER`     | Replication user (production)     | `replicator`                                              |
-| `POSTGRES_REPLICATION_PASSWORD` | Replication password (production) | —                                                         |
-| `SPRING_PROFILES_ACTIVE`        | Spring Boot profile               | `dev`                                                     |
-
-## Redis Configuration
-
-Redis is configured for durable secret storage with:
-
-- **AOF persistence**: `appendfsync everysec` (max 1 second data loss)
-- **RDB snapshots**: Every 15 minutes if keys changed
-- **No eviction**: Secrets are never auto-deleted
-- **Password auth**: Required for all connections
-
-See `redis/redis.conf` for full configuration.
+```bash
+curl -sS http://127.0.0.1:8081/api/temp-test/kafka
+docker logs dsv-app-1 2>&1 | grep -i "Received commit" | tail -3
+docker logs dsv-app-2 2>&1 | grep -i "Received commit" | tail -3
+docker logs dsv-app-3 2>&1 | grep -i "Received commit" | tail -3
+```
 
 ## Services
 
-### `redis`
+`redis` stores secret shards durably with AOF persistence and password auth.
 
-- **Image**: redis:8.6-alpine
-- **Ports**: 6379
-- **Volumes**: Persistent data in `redis-data` volume
+`kafka` provides commit fanout and ordering infrastructure in KRaft mode.
 
-### `postgres`
-
-- **Image**: postgres:18.2-alpine
-- **Ports**: 5432
-- **Volumes**: Persistent data in `postgres-data` volume
-- **Healthcheck**: `pg_isready` before app starts
-- **Purpose**: User accounts; development uses a single node. For production redundancy, use the production compose (see below).
-
-### `kafka`
-
-- **Image**: apache/kafka:3.7.0
-- **Ports**: 9092
-- **Volumes**: Persistent data in `kafka-data` volume
-- **Purpose**: Message broker for request sequencing. Uses KRaft (ZooKeeper-less) mode.
-
-### `app`
-
-- **Build**: From project root (build context `../..`); uses the Dockerfile in the project root.
-- **Ports**: 8080
-- **Depends on**: Redis and/or PostgreSQL (waits for health checks when present)
+`app` is the Spring Boot DSV service built from the repository root Dockerfile.
 
 ## Commands
 
-All commands assume you are in the **project root**.
-
 ```bash
-# Full dev stack (app + Redis + PostgreSQL)
-./mvnw clean package
-mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
+# Start full local stack
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml up
 
 # Start in background
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up -d
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml up -d
 
 # View logs
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f app
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f redis
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml logs -f postgres
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml logs -f app
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml logs -f redis
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml logs -f kafka
 
 # Stop services
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml down
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml down
 
-# Clean slate (removes volumes)
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml down -v
-
-# Rebuild after code changes
-./mvnw clean package && mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-docker compose -f docker/dsv/docker-compose.dsv-redis-postgresql.yml up --build
+# Clean slate, including volumes
+docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml down -v
 ```
 
-## Production PostgreSQL (multi-node)
-
-For production, run one primary and two synchronous standbys for redundancy:
-
-```bash
-# From project root. Set in .env: POSTGRES_PASSWORD, POSTGRES_REPLICATION_USER (default: replicator), POSTGRES_REPLICATION_PASSWORD
-docker compose -f docker/postgresql/docker-compose.postgresql-production.yml up -d
-```
-
-- **postgres-primary**: Read-write; uses `postgresql/postgresql.conf` (WAL archiving, synchronous replication). Port 5432.
-- **postgres-1**, **postgres-2**: Read-only standbys; stream from primary. Application names match `synchronous_standby_names` in `postgresql.conf` so commits wait for at least one standby.
-- Scripts: `scripts/init-primary.sh` creates the replication user on first start; `scripts/replica-entrypoint.sh` bootstraps each standby with `pg_basebackup` then starts streaming.
-
-Applications should connect to the primary (hostname `postgres-primary`) for read-write; standbys can be used for read scaling if desired.
-
-## Network
-
-All services communicate on the `dsv-network` bridge network. The app connects to Redis using the hostname `redis` and to PostgreSQL using the hostname `postgres` (dev) or `postgres-primary` (production).
+All services communicate on the `dsv-network` bridge network. The app connects to Redis as `redis` and Kafka as `kafka:29092`.

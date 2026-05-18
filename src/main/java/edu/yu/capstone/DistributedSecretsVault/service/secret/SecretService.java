@@ -18,8 +18,7 @@ import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
 @Service
 public class SecretService {
-    private final SecretPartRepository secretPartRepository; // way to access the data, needs to be updated to
-                                                             // incorporate redis or postgres
+    private final SecretPartRepository secretPartRepository;
     private final SecretSharingService secretSharingService;
     private final SecretReconstructionService secretReconstructionService;
     private final ClusterConfig clusterConfig;
