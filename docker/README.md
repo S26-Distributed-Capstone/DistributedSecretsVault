@@ -10,7 +10,7 @@ docker/
 │   ├── docker-compose.dsv.yml                    # App only
 │   ├── docker-compose.dsv-redis.yml              # App + Redis
 │   ├── docker-compose.dsv-redis-kafka.yml        # App + Redis + Kafka
-│   └── docker-compose.dsv-redis-kafka-3nodes.yml # Three DSV app instances
+│   └── docker-compose.dsv-redis-kafka-3nodes.yml # Three DSV app instances + per-node Redis
 ├── redis/
 │   ├── docker-compose.redis.yml                  # Redis only
 │   └── redis.conf                                # Redis persistence and security config
@@ -54,7 +54,7 @@ The API listens on `http://localhost:8080`.
 
 ## Three App Nodes
 
-For local cluster-like testing, run three DSV app instances against the same Redis and Kafka services:
+For local cluster-like testing, run three DSV app instances against shared Kafka and one Redis service per app node:
 
 ```bash
 ./mvnw clean package -DskipTests
@@ -62,7 +62,7 @@ mkdir -p target/dependency && (cd target/dependency && jar -xf ../*.jar)
 docker compose -f docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml up -d --build
 ```
 
-Apps listen on `8081`, `8082`, and `8083`. Each instance sets a different `NODE_NAME` so Kafka consumer groups differ and every node receives `secrets-commit` messages.
+Apps listen on `8081`, `8082`, and `8083`. Redis instances for those nodes are published on `6381`, `6382`, and `6383`. Each app points at its own Redis service and sets a different `NODE_NAME` so Kafka consumer groups differ and every node receives `secrets-commit` messages.
 
 Automated check:
 
@@ -81,7 +81,7 @@ docker logs dsv-app-3 2>&1 | grep -i "Received commit" | tail -3
 
 ## Services
 
-`redis` stores secret shards durably with AOF persistence and password auth.
+`redis` stores secret shards durably with AOF persistence and password auth. In the three-node stack this is split into `redis1`, `redis2`, and `redis3`, one per app node.
 
 `kafka` provides commit fanout and ordering infrastructure in KRaft mode.
 
@@ -108,4 +108,4 @@ docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml down
 docker compose -f docker/dsv/docker-compose.dsv-redis-kafka.yml down -v
 ```
 
-All services communicate on the `dsv-network` bridge network. The app connects to Redis as `redis` and Kafka as `kafka:29092`.
+All services communicate on the `dsv-network` bridge network. Single-app stacks connect to Redis as `redis`; the three-node stack connects `app1`, `app2`, and `app3` to `redis1`, `redis2`, and `redis3`. Kafka is reachable as `kafka:29092`.

@@ -11,8 +11,9 @@
 # Tunables:
 #   NODE_COUNT=3..10        number of DSV app nodes to run, default 3
 #   BASE_PORT=8081          host port for node 1; node N uses BASE_PORT+N-1
+#   REDIS_BASE_PORT=6381    host port for redis1; redisN uses REDIS_BASE_PORT+N-1
 #   QUORUM_M=<n>            required write ACKs, default majority
-#   THRESHOLD_K=1           current public HTTP demo path expects 1
+#   THRESHOLD_K=<n>         Shamir reconstruction threshold, default majority
 #   KEEP_STACK=1            leave the Docker stack running after the demo
 #   SKIP_BUILD=1            reuse target/dependency instead of rebuilding
 #   PROJECT_NAME=dsv-demo   Docker Compose project/container prefix
@@ -26,10 +27,14 @@ NODE_COUNT="${NODE_COUNT:-3}"
 BASE_PORT="${BASE_PORT:-8081}"
 PROJECT_NAME="${PROJECT_NAME:-dsv-demo}"
 REDIS_PASSWORD="${REDIS_PASSWORD:-REDIS_PASSWORD}"
-REDIS_HOST_PORT="${REDIS_HOST_PORT:-6381}"
+REDIS_BASE_PORT="${REDIS_BASE_PORT:-${REDIS_HOST_PORT:-6381}}"
 KAFKA_HOST_PORT="${KAFKA_HOST_PORT:-19092}"
-THRESHOLD_K="${THRESHOLD_K:-1}"
-QUORUM_M="${QUORUM_M:-$((NODE_COUNT / 2 + 1))}"
+THRESHOLD_K="${THRESHOLD_K:-$((NODE_COUNT / 2 + 1))}"
+DEFAULT_QUORUM_M="$((NODE_COUNT / 2 + 1))"
+if (( DEFAULT_QUORUM_M < THRESHOLD_K )); then
+    DEFAULT_QUORUM_M="$THRESHOLD_K"
+fi
+QUORUM_M="${QUORUM_M:-$DEFAULT_QUORUM_M}"
 SPRING_PROFILE="${SPRING_PROFILES_ACTIVE:-dev}"
 STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-210}"
 CLUSTER_TIMEOUT_SECONDS="${CLUSTER_TIMEOUT_SECONDS:-180}"
@@ -126,6 +131,7 @@ print_body_preview() {
 validate_config() {
     [[ "$NODE_COUNT" =~ ^[0-9]+$ ]] || die "NODE_COUNT must be numeric"
     [[ "$BASE_PORT" =~ ^[0-9]+$ ]] || die "BASE_PORT must be numeric"
+    [[ "$REDIS_BASE_PORT" =~ ^[0-9]+$ ]] || die "REDIS_BASE_PORT must be numeric"
     [[ "$QUORUM_M" =~ ^[0-9]+$ ]] || die "QUORUM_M must be numeric"
     [[ "$THRESHOLD_K" =~ ^[0-9]+$ ]] || die "THRESHOLD_K must be numeric"
 
@@ -135,8 +141,11 @@ validate_config() {
     if (( QUORUM_M < 1 || QUORUM_M > NODE_COUNT )); then
         die "QUORUM_M must be between 1 and NODE_COUNT"
     fi
-    if (( THRESHOLD_K != 1 )); then
-        die "THRESHOLD_K must be 1 for the current public HTTP demo path"
+    if (( THRESHOLD_K < 1 || THRESHOLD_K > NODE_COUNT )); then
+        die "THRESHOLD_K must be between 1 and NODE_COUNT"
+    fi
+    if (( QUORUM_M < THRESHOLD_K )); then
+        die "QUORUM_M must be greater than or equal to THRESHOLD_K"
     fi
 }
 
@@ -164,6 +173,11 @@ node_container() {
     printf "%s-app-%d" "$PROJECT_NAME" "$index"
 }
 
+redis_container() {
+    local index="$1"
+    printf "%s-redis-%d" "$PROJECT_NAME" "$index"
+}
+
 write_compose_file() {
     mkdir -p "$DEMO_DIR"
 
@@ -171,23 +185,6 @@ write_compose_file() {
 name: ${PROJECT_NAME}
 
 services:
-  redis:
-    image: redis:8.6-alpine
-    container_name: ${PROJECT_NAME}-redis
-    ports:
-      - "${REDIS_HOST_PORT}:6379"
-    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis-data:/var/lib/redis
-      - "${ROOT}/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro"
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD}' ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 8
-    networks:
-      - dsv-network
-
   kafka:
     image: apache/kafka:3.7.0
     container_name: ${PROJECT_NAME}-kafka
@@ -221,8 +218,29 @@ YAML
 
     for i in $(seq 1 "$NODE_COUNT"); do
         local host_port
+        local redis_host_port
         host_port=$((BASE_PORT + i - 1))
+        redis_host_port=$((REDIS_BASE_PORT + i - 1))
         cat >> "$COMPOSE_FILE" <<YAML
+
+  redis${i}:
+    image: redis:8.6-alpine
+    container_name: ${PROJECT_NAME}-redis-${i}
+    ports:
+      - "${redis_host_port}:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data-${i}:/data
+      - "${ROOT}/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"\$\${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 8
+    networks:
+      - dsv-network
 
   app${i}:
     build:
@@ -237,7 +255,7 @@ YAML
       - CLUSTER_PORT=4801
       - SEED_DNS_HOST=app1
       - SEED_DNS_PORT=4801
-      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_HOST=redis${i}
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILE}
@@ -250,7 +268,7 @@ YAML
       - CLUSTER_QUORUM_M=${QUORUM_M}
       - CLUSTER_QUORUMM=${QUORUM_M}
     depends_on:
-      redis:
+      redis${i}:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -262,8 +280,16 @@ YAML
     cat >> "$COMPOSE_FILE" <<YAML
 
 volumes:
-  redis-data:
   kafka-data:
+YAML
+
+    for i in $(seq 1 "$NODE_COUNT"); do
+        cat >> "$COMPOSE_FILE" <<YAML
+  redis-data-${i}:
+YAML
+    done
+
+    cat >> "$COMPOSE_FILE" <<YAML
 
 networks:
   dsv-network:
@@ -390,40 +416,76 @@ settle_commits() {
 
 stop_node() {
     local index="$1"
-    local container
-    container="$(node_container "$index")"
-    info "Stopping ${container}"
-    docker stop "$container" >/dev/null
+    local app_container
+    local redis_node_container
+    app_container="$(node_container "$index")"
+    redis_node_container="$(redis_container "$index")"
+    info "Stopping ${app_container} and ${redis_node_container}"
+    docker stop "$app_container" "$redis_node_container" >/dev/null
 }
 
 start_node() {
     local index="$1"
-    local container
-    container="$(node_container "$index")"
-    info "Starting ${container}"
-    docker start "$container" >/dev/null
+    local app_container
+    local redis_node_container
+    app_container="$(node_container "$index")"
+    redis_node_container="$(redis_container "$index")"
+    info "Starting ${redis_node_container}"
+    docker start "$redis_node_container" >/dev/null
+    wait_for_container_health "$redis_node_container"
+    info "Starting ${app_container}"
+    docker start "$app_container" >/dev/null
     wait_for_health "$(node_url "$index")" "node ${index}"
     sleep "$COMMIT_SETTLE_SECONDS"
 }
 
+wait_for_container_health() {
+    local container="$1"
+    local elapsed=0
+    local status
+
+    while true; do
+        status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
+            "$container" 2>/dev/null || true)"
+        if [[ "$status" == "healthy" || "$status" == "running" ]]; then
+            return
+        fi
+        if (( elapsed >= STARTUP_TIMEOUT_SECONDS )); then
+            die "${container} did not become healthy within ${STARTUP_TIMEOUT_SECONDS}s"
+        fi
+        sleep 3
+        elapsed=$((elapsed + 3))
+    done
+}
+
 stop_nodes_except_one() {
-    local containers=()
+    local app_containers=()
+    local redis_containers=()
     local i
     for i in $(seq 2 "$NODE_COUNT"); do
-        containers+=("$(node_container "$i")")
+        app_containers+=("$(node_container "$i")")
+        redis_containers+=("$(redis_container "$i")")
     done
-    info "Stopping nodes 2..${NODE_COUNT}; node 1 remains online"
-    docker stop "${containers[@]}" >/dev/null 2>&1 || true
+    info "Stopping app and Redis containers for nodes 2..${NODE_COUNT}; node 1 remains online"
+    docker stop "${app_containers[@]}" >/dev/null 2>&1 || true
+    docker stop "${redis_containers[@]}" >/dev/null 2>&1 || true
 }
 
 start_all_nodes() {
-    local containers=()
+    local app_containers=()
+    local redis_containers=()
     local i
     for i in $(seq 2 "$NODE_COUNT"); do
-        containers+=("$(node_container "$i")")
+        redis_containers+=("$(redis_container "$i")")
+        app_containers+=("$(node_container "$i")")
     done
-    info "Starting nodes 2..${NODE_COUNT}"
-    docker start "${containers[@]}" >/dev/null
+    info "Starting Redis containers for nodes 2..${NODE_COUNT}"
+    docker start "${redis_containers[@]}" >/dev/null
+    for i in $(seq 2 "$NODE_COUNT"); do
+        wait_for_container_health "$(redis_container "$i")"
+    done
+    info "Starting app containers for nodes 2..${NODE_COUNT}"
+    docker start "${app_containers[@]}" >/dev/null
     for i in $(seq 1 "$NODE_COUNT"); do
         wait_for_health "$(node_url "$i")" "node ${i}"
     done
@@ -602,8 +664,12 @@ run_demo() {
     sleep "$COMMIT_SETTLE_SECONDS"
 
     request GET "$(node_url 1)/api/v1/secrets/${shared_secret}?user=${alice}"
-    expect_status "200" "$HTTP_STATUS" "Existing secret remains readable from the surviving node"
-    expect_body_contains "$LATEST_ALICE_VALUE" "$HTTP_BODY" "Surviving node returns the current value"
+    if (( THRESHOLD_K == 1 )); then
+        expect_status "200" "$HTTP_STATUS" "Existing secret remains readable from the surviving node"
+        expect_body_contains "$LATEST_ALICE_VALUE" "$HTTP_BODY" "Surviving node returns the current value"
+    else
+        expect_status "503" "$HTTP_STATUS" "Read is rejected when fewer than K shards are online"
+    fi
 
     request POST "$(node_url 1)/api/v1/secrets" \
         "{\"secretName\":\"quorum-check-${RUN_ID}\",\"secretValue\":\"should-not-commit-without-quorum\",\"user\":\"${alice}\"}"
@@ -670,8 +736,8 @@ main() {
 
     trap cleanup EXIT
 
-    write_compose_file
     build_app
+    write_compose_file
     start_cluster
     run_demo
     print_summary

@@ -24,7 +24,7 @@ The application will be available at:
 | `docker/dsv/docker-compose.dsv.yml` | App only |
 | `docker/dsv/docker-compose.dsv-redis.yml` | App + Redis |
 | `docker/dsv/docker-compose.dsv-redis-kafka.yml` | App + Redis + Kafka |
-| `docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml` | Three app nodes + Redis + Kafka |
+| `docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml` | Three app nodes + per-node Redis + Kafka |
 | `docker/redis/docker-compose.redis.yml` | Redis only |
 | `docker/kafka/docker-compose.kafka.yml` | Kafka only |
 
@@ -49,6 +49,12 @@ The apps listen on:
 - `http://127.0.0.1:8081`
 - `http://127.0.0.1:8082`
 - `http://127.0.0.1:8083`
+
+Each app in the three-node stack has its own Redis service, matching the Kubernetes sidecar model:
+
+- app1 -> redis1, published at `localhost:6381`
+- app2 -> redis2, published at `localhost:6382`
+- app3 -> redis3, published at `localhost:6383`
 
 ## Configuration
 
