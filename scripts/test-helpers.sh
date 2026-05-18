@@ -9,6 +9,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT}/docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml"
 
+# ── Test runner options ─────────────────────────────────────────────
+# AUTO_START_CLUSTER=1 starts a fresh Docker stack for each test script.
+# Set AUTO_START_CLUSTER=0 to run a script against an already-running stack.
+AUTO_START_CLUSTER="${AUTO_START_CLUSTER:-1}"
+KEEP_STACK="${KEEP_STACK:-0}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
+
 # ── Node URLs ────────────────────────────────────────────────────────
 NODE1="${NODE1:-http://127.0.0.1:8081}"
 NODE2="${NODE2:-http://127.0.0.1:8082}"
@@ -29,14 +36,32 @@ TOTAL_COUNT=0
 
 # ── Functions ────────────────────────────────────────────────────────
 
+# Container names in docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml.
+app_container() {
+    local index="$1"
+    printf "dsv-app-%d" "$index"
+}
+
+redis_container() {
+    local index="$1"
+    printf "dsv-redis-%d" "$index"
+}
+
 # Start the 3-node cluster (build + docker compose up)
 start_cluster() {
-    echo -e "${CYAN}==> Building layered JAR layout for Docker${NC}"
-    (cd "$ROOT" && ./mvnw -q clean package -DskipTests)
-    mkdir -p "$ROOT/target/dependency"
-    (cd "$ROOT/target/dependency" && jar -xf ../*.jar)
+    mkdir -p "$ROOT/target"
+
+    if [[ "$SKIP_BUILD" == "1" ]]; then
+        echo -e "${CYAN}==> Skipping Maven build because SKIP_BUILD=1${NC}"
+    else
+        echo -e "${CYAN}==> Building layered JAR layout for Docker${NC}"
+        (cd "$ROOT" && ./mvnw -q clean package -DskipTests)
+        mkdir -p "$ROOT/target/dependency"
+        (cd "$ROOT/target/dependency" && jar -xf ../*.jar)
+    fi
 
     echo -e "${CYAN}==> Starting 3-node cluster${NC}"
+    docker compose -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
     docker compose -f "$COMPOSE_FILE" up -d --build
 
     echo -e "${CYAN}==> Waiting for all nodes to become healthy (up to 180s)${NC}"
@@ -49,10 +74,41 @@ start_cluster() {
     echo -e "${GREEN}==> All nodes healthy${NC}"
 }
 
+setup_test_cluster() {
+    mkdir -p "$ROOT/target"
+
+    if [[ "$AUTO_START_CLUSTER" == "0" ]]; then
+        echo -e "${CYAN}==> Using existing 3-node cluster because AUTO_START_CLUSTER=0${NC}"
+        for url in "${NODES[@]}"; do
+            wait_for_health "$url"
+        done
+        return
+    fi
+
+    trap cleanup_test_cluster EXIT
+    start_cluster
+}
+
+cleanup_test_cluster() {
+    local status=$?
+
+    if [[ "$AUTO_START_CLUSTER" == "0" ]]; then
+        return "$status"
+    fi
+
+    if [[ "$KEEP_STACK" == "1" ]]; then
+        echo -e "${CYAN}==> KEEP_STACK=1, leaving cluster running${NC}"
+        return "$status"
+    fi
+
+    stop_cluster
+    return "$status"
+}
+
 # Stop the cluster
 stop_cluster() {
     echo -e "${CYAN}==> Stopping cluster${NC}"
-    docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+    docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 }
 
 # Wait for a node's actuator health endpoint to respond
@@ -67,6 +123,72 @@ wait_for_health() {
         fi
         sleep 5
         elapsed=$((elapsed + 5))
+    done
+}
+
+wait_for_container_health() {
+    local container="$1"
+    local timeout=180
+    local elapsed=0
+    local status
+
+    while true; do
+        status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
+            "$container" 2>/dev/null || true)"
+        if [[ "$status" == "healthy" || "$status" == "running" ]]; then
+            return
+        fi
+        if (( elapsed >= timeout )); then
+            echo -e "${RED}ERROR: ${container} did not become healthy in ${timeout}s${NC}" >&2
+            return 1
+        fi
+        sleep 3
+        elapsed=$((elapsed + 3))
+    done
+}
+
+stop_node() {
+    local index="$1"
+    local app
+    local redis
+    app="$(app_container "$index")"
+    redis="$(redis_container "$index")"
+    docker stop "$app" "$redis" >/dev/null 2>&1 || true
+}
+
+start_node() {
+    local index="$1"
+    local app
+    local redis
+    app="$(app_container "$index")"
+    redis="$(redis_container "$index")"
+
+    docker start "$redis" >/dev/null 2>&1
+    wait_for_container_health "$redis"
+    docker start "$app" >/dev/null 2>&1
+    wait_for_health "${NODES[$((index - 1))]}"
+}
+
+stop_nodes() {
+    local index
+    for index in "$@"; do
+        stop_node "$index"
+    done
+}
+
+start_nodes() {
+    local index
+    for index in "$@"; do
+        docker start "$(redis_container "$index")" >/dev/null 2>&1
+    done
+    for index in "$@"; do
+        wait_for_container_health "$(redis_container "$index")"
+    done
+    for index in "$@"; do
+        docker start "$(app_container "$index")" >/dev/null 2>&1
+    done
+    for index in "$@"; do
+        wait_for_health "${NODES[$((index - 1))]}"
     done
 }
 

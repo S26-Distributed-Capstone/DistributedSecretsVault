@@ -13,6 +13,8 @@ echo -e "${CYAN}═════════════════════�
 echo -e "${CYAN} Concurrent Request Integration Tests${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════${NC}"
 
+setup_test_cluster
+
 USER="concurrency-user-$(date +%s)"
 SECRET_NAME=$(unique_key "conc")
 SECRET_VALUE="original-concurrent-value"

@@ -13,6 +13,8 @@ echo -e "${CYAN}═════════════════════�
 echo -e "${CYAN} Multi-Client Integration Tests${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════${NC}"
 
+setup_test_cluster
+
 SECRET_NAME=$(unique_key "shared-name")
 USER_A="alice-$(date +%s)"
 USER_B="bob-$(date +%s)"

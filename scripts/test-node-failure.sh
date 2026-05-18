@@ -13,6 +13,8 @@ echo -e "${CYAN}═════════════════════�
 echo -e "${CYAN} Node Failure & Recovery Integration Tests${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════${NC}"
 
+setup_test_cluster
+
 USER="failure-user-$(date +%s)"
 SECRET_NAME=$(unique_key "failure-test")
 SECRET_VALUE="data-for-failure-test"
@@ -40,8 +42,8 @@ done
 echo ""
 echo -e "${YELLOW}--- Stop Node 3 ---${NC}"
 
-docker stop dsv-app-3 >/dev/null 2>&1 || true
-echo -e "  ${CYAN}Node 3 stopped${NC}"
+stop_node 3
+echo -e "  ${CYAN}Node 3 app and Redis stopped${NC}"
 sleep 5
 
 # ── 4. Read from Node 1 (2 nodes remaining) ─────────────────────────
@@ -87,9 +89,8 @@ fi
 echo ""
 echo -e "${YELLOW}--- Restart Node 3 ---${NC}"
 
-docker start dsv-app-3 >/dev/null 2>&1
-echo -e "  ${CYAN}Node 3 restarting...${NC}"
-wait_for_health "$NODE3"
+echo -e "  ${CYAN}Node 3 app and Redis restarting...${NC}"
+start_node 3
 echo -e "  ${GREEN}Node 3 healthy again${NC}"
 sleep 5
 
@@ -105,8 +106,8 @@ assert_body_contains "${SECRET_VALUE}" "$HTTP_BODY" "Recovered node returns corr
 echo ""
 echo -e "${YELLOW}--- Stop Node 2 and Node 3 ---${NC}"
 
-docker stop dsv-app-2 dsv-app-3 >/dev/null 2>&1 || true
-echo -e "  ${CYAN}Node 2 and Node 3 stopped (only Node 1 running)${NC}"
+stop_nodes 2 3
+echo -e "  ${CYAN}Node 2 and Node 3 apps and Redis services stopped (only Node 1 running)${NC}"
 sleep 5
 
 # ── 9. Try to create on Node 1 alone → should fail quorum ───────────
@@ -134,12 +135,8 @@ fi
 echo ""
 echo -e "${YELLOW}--- Restart all nodes ---${NC}"
 
-docker start dsv-app-2 dsv-app-3 >/dev/null 2>&1
-echo -e "  ${CYAN}Restarting Node 2 and Node 3...${NC}"
-
-for url in "${NODES[@]}"; do
-    wait_for_health "$url"
-done
+echo -e "  ${CYAN}Restarting Node 2 and Node 3 apps and Redis services...${NC}"
+start_nodes 2 3
 echo -e "  ${GREEN}All nodes healthy${NC}"
 sleep 5
 

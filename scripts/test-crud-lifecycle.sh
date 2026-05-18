@@ -13,6 +13,8 @@ echo -e "${CYAN}═════════════════════�
 echo -e "${CYAN} CRUD Lifecycle Integration Tests${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════${NC}"
 
+setup_test_cluster
+
 # Generate unique key names to avoid collisions
 SECRET_NAME=$(unique_key "crud-test")
 USER="crud-test-user"
