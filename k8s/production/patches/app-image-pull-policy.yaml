@@ -1,0 +1,12 @@
+# Pull from Docker Hub on every pod start so :latest updates are picked up after a push.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dsv-app
+  namespace: dsv
+spec:
+  template:
+    spec:
+      containers:
+        - name: dsv-app
+          imagePullPolicy: Always

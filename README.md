@@ -17,5 +17,6 @@ The Distributed Secrets Vault is a leaderless cluster system where secrets are s
 ## Installation and Usage Guide
 
 - [Installation Instructions](docker/README.md)
+- [Docker Hub image & Kubernetes deploy](docs/docker-hub.md)
 - [API and Usage Documentation](docs/api.md)
 - [DSV Client Repository](https://github.com/S26-Distributed-Capstone/DSVClient)

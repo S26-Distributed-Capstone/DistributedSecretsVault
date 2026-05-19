@@ -17,6 +17,7 @@ spec:
     spec:
       containers:
         - name: dsv-app
+          # Replaced by k8s/testing/kustomization.yaml; pull policy patched to IfNotPresent
           image: dsv-backend:latest
           imagePullPolicy: Never
           ports:

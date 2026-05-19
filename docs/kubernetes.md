@@ -65,8 +65,8 @@ KAFKA_BOOTSTRAP_SERVERS=kafka.dsv.svc.cluster.local:9092
 `k8s/testing` is intended for Docker Desktop, Minikube, or K3d. It runs three DSV app replicas without production node-affinity constraints.
 
 ```bash
-kubectl apply -f k8s/testing/
-kubectl get pods -w
+kubectl apply -k k8s/testing/
+kubectl get pods -n dsv -w
 ```
 
 ## Production Environment
@@ -77,9 +77,9 @@ kubectl get pods -w
 - app pods use pod anti-affinity (one DSV pod per worker)
 - **10 replicas** with `cluster.totalNodes=10`, `thresholdK=6`, `quorumM=6`
 
-Full steps (scp manifests, import image on all workers, verify): [production-kubernetes-deploy.md](production-kubernetes-deploy.md).
+Image is pulled from Docker Hub on each node. Build/push: [docker-hub.md](docker-hub.md). Deploy steps: [production-kubernetes-deploy.md](production-kubernetes-deploy.md).
 
 ```bash
-kubectl apply -f k8s/production/ --dry-run=client
-kubectl apply -f k8s/production/
+kubectl apply -k k8s/production/ --dry-run=client
+kubectl apply -k k8s/production/
 ```

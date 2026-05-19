@@ -1,0 +1,18 @@
+# Apply with: kubectl apply -k k8s/production/
+# Image name/tag defaults match k8s/image.env.example — edit both when changing registry.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dsv
+resources:
+  - namespace.yaml
+  - kafka-service.yaml
+  - kafka-statefulset.yaml
+  - app-service.yaml
+  - app-statefulset.yaml
+  - ingress.yaml
+images:
+  - name: dsv-backend
+    newName: docker.io/noambensim/distributed-secrets-vault
+    newTag: latest
+patches:
+  - path: patches/app-image-pull-policy.yaml
