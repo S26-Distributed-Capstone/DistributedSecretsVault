@@ -7,12 +7,14 @@ This directory contains Kubernetes manifests for Distributed Secrets Vault. The 
 ```text
 k8s/
 ├── production/
+│   ├── namespace.yaml
 │   ├── app-service.yaml
 │   ├── app-statefulset.yaml
 │   ├── ingress.yaml
 │   ├── kafka-service.yaml
 │   └── kafka-statefulset.yaml
 ├── testing/
+│   ├── namespace.yaml
 │   ├── app-service.yaml
 │   ├── app-statefulset.yaml
 │   ├── ingress.yaml
@@ -21,13 +23,15 @@ k8s/
 └── README.md
 ```
 
+All resources use the **`dsv`** namespace.
+
 ## Architecture
 
 - `dsv-app` is a StatefulSet.
 - Redis runs as a sidecar inside every `dsv-app` pod and persists data through a per-pod PVC.
 - `dsv-app-headless` exposes pod DNS records for ScaleCube peer discovery.
-- `dsv-app-service` load-balances HTTP traffic to healthy app pods.
-- Kafka is available at `kafka.default.svc.cluster.local:9092`.
+- `dsv-app-service` load-balances HTTP traffic to healthy app pods on port **9080** (avoids common **8080** conflicts).
+- Kafka is available at `kafka.dsv.svc.cluster.local:9092`.
 
 The production manifests keep the one-app-pod-per-worker-node placement strategy through node affinity and pod anti-affinity. The testing manifests remove those scheduling constraints for Docker Desktop, Minikube, or K3d.
 
@@ -45,18 +49,21 @@ Then deploy:
 
 ```bash
 kubectl apply -f k8s/testing/
-kubectl get pods -w
+kubectl get pods -n dsv -w
 ```
 
 The testing app manifest uses `imagePullPolicy: Never`, so the image must exist in the local cluster's Docker image store.
 
 ## Production
 
+Tuned for **10 worker nodes** (one `dsv-app` pod per worker, Shamir k=6 / quorum m=6). See [docs/production-kubernetes-deploy.md](../docs/production-kubernetes-deploy.md) for scp, image import on all workers, and verification steps.
+
 ```bash
+kubectl apply -f k8s/production/ --dry-run=client
 kubectl apply -f k8s/production/
 ```
 
-Before production use, replace placeholder image and ingress details with the registry image and hostnames for the target cluster.
+Before production use, load `dsv-backend:latest` on every worker (or switch to a registry image) and set ingress host/TLS as needed.
 
 ## App Environment
 
@@ -75,7 +82,7 @@ Before production use, replace placeholder image and ingress details with the re
 
 ScaleCube startup is DNS-based:
 
-- `SEED_DNS_HOST=dsv-app-headless.default.svc.cluster.local`
+- `SEED_DNS_HOST=dsv-app-headless.dsv.svc.cluster.local`
 - `SEED_DNS_PORT=4801`
 - `CLUSTER_PORT=4801`
 

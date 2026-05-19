@@ -2,11 +2,12 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: dsv-app
-  namespace: default
+  namespace: dsv
 spec:
-  # Max 12 nodes based on config. Missing nodes will stay pending (Standby behavior).
-  replicas: 12
+  # One DSV pod per worker (10 workers). Scale replicas when adding workers.
+  replicas: 10
   serviceName: dsv-app-headless
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       app: dsv-app
@@ -15,13 +16,14 @@ spec:
       labels:
         app: dsv-app
     spec:
-      # Ensure only one DSV worker per physical node (agent node)
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/master
                     operator: DoesNotExist
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,15 +33,19 @@ spec:
                     operator: In
                     values:
                       - dsv-app
-              topologyKey: "kubernetes.io/hostname"
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: dsv-app
           image: dsv-backend:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4801
               name: cluster
-            - containerPort: 8080
+            - containerPort: 9080
+              name: http
           env:
+            - name: SERVER_PORT
+              value: "9080"
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
@@ -51,32 +57,63 @@ spec:
             - name: CLUSTER_PORT
               value: "4801"
             - name: SEED_DNS_HOST
-              value: "dsv-app-headless.default.svc.cluster.local"
+              value: dsv-app-headless.dsv.svc.cluster.local
             - name: SEED_DNS_PORT
               value: "4801"
-            # Sidecar redis is reachable via localhost
             - name: SPRING_DATA_REDIS_HOST
-              value: "localhost"
+              value: localhost
             - name: SPRING_DATA_REDIS_PORT
               value: "6379"
+            - name: SPRING_DATA_REDIS_PASSWORD
+              value: ""
             - name: SPRING_PROFILES_ACTIVE
-              value: "prod"
+              value: prod
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka.default.svc.cluster.local:9092"
-        # Redis Sidecar container within the same Pod
+              value: kafka.dsv.svc.cluster.local:9092
+            # 10-node cluster: majority k=6, quorum m=6 (see scripts/demo-cluster-lifecycle.sh)
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Dcluster.totalNodes=10 -Dcluster.thresholdK=6 -Dcluster.quorumM=6"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
         - name: redis-sidecar
           image: redis:8.6-alpine
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 6379
+              name: redis
           command: ["redis-server", "--appendonly", "yes"]
           volumeMounts:
             - name: redis-data
               mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
   volumeClaimTemplates:
     - metadata:
         name: redis-data
       spec:
-        accessModes: [ "ReadWriteOnce" ]
+        accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: 1Gi
+            storage: 5Gi

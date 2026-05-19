@@ -1,17 +1,17 @@
 # Local CRUD Smoke Test (PowerShell)
 
-These commands assume the local Kubernetes service is port-forwarded to `127.0.0.1:8080`.
+These commands assume the local Kubernetes service is port-forwarded to `127.0.0.1:9080`.
 
 Start the port-forward in one PowerShell terminal:
 
 ```powershell
-kubectl port-forward service/dsv-app-service 8080:80
+kubectl port-forward -n dsv service/dsv-app-service 9080:9080
 ```
 
 Run the CRUD commands in another PowerShell terminal:
 
 ```powershell
-$BASE = "http://127.0.0.1:8080"
+$BASE = "http://127.0.0.1:9080"
 ```
 
 ## Health
