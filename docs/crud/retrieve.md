@@ -23,12 +23,11 @@ In every case the receiving node collects at least k shards (the reconstruction 
 - [4. Secret Not Found](#4-secret-not-found)
 - [5. Version Not Found](#5-version-not-found)
 - [6. Insufficient Shards](#6-insufficient-shards)
-- [7. Not Authorized to Access Secret](#7-not-authorized-to-access-secret)
-- [8. Ingress Unavailable](#8-ingress-unavailable)
-- [9. Node Unavailable](#9-node-unavailable)
-- [10. Local Shard Read Failure](#10-local-shard-read-failure)
-- [11. Version Enumeration Failure](#11-version-enumeration-failure)
-- [12. Shard Reconstruction Failure](#12-shard-reconstruction-failure)
+- [7. Ingress Unavailable](#7-ingress-unavailable)
+- [8. Node Unavailable](#8-node-unavailable)
+- [9. Local Shard Read Failure](#9-local-shard-read-failure)
+- [10. Version Enumeration Failure](#10-version-enumeration-failure)
+- [11. Shard Reconstruction Failure](#11-shard-reconstruction-failure)
 
 ---
 
@@ -130,11 +129,10 @@ sequenceDiagram
 
 ## 4. Secret Not Found
 
-- **When it happens**: The key has no recorded versions for the authenticated user.
+- **When it happens**: The key has no recorded versions for the provided user space.
 - **Handling**:
     - Receiving node checks local metadata first, then consults peers only if metadata is uncertain.
     - If no node can confirm any version for the key, return `404 Not Found` with a stable error code.
-    - Do not leak existence across tenants; errors should be scoped to the authenticated user.
     - Cache the negative lookup briefly to reduce repeated fan-out.
 - **Response**: `404 Not Found`
 
@@ -164,19 +162,7 @@ sequenceDiagram
 
 ---
 
-## 7. Not Authorized to Access Secret
-
-- **When it happens**: Authentication fails or authorization rules deny access.
-- **Handling**:
-    - Reject early at the ingress when possible; nodes still enforce authorization on every request.
-    - Return `401 Unauthorized` for invalid/expired credentials, `403 Forbidden` for valid but insufficient access.
-    - Do not indicate whether the secret exists.
-    - Audit log the denial with request metadata (no plaintext).
-- **Response**: `401 Unauthorized` or `403 Forbidden`
-
----
-
-## 8. Ingress Unavailable
+## 7. Ingress Unavailable
 
 - **When it happens**: The Traefik ingress is unreachable or returns errors to the client.
 - **Handling**:
@@ -188,7 +174,7 @@ sequenceDiagram
 
 ---
 
-## 9. Node Unavailable
+## 8. Node Unavailable
 
 - **When it happens**: The target node is down or unreachable.
 - **Handling**:
@@ -200,7 +186,7 @@ sequenceDiagram
 
 ---
 
-## 10. Local Shard Read Failure
+## 9. Local Shard Read Failure
 
 - **When it happens**: Local storage returns an error or corrupted shard data.
 - **Handling**:
@@ -212,7 +198,7 @@ sequenceDiagram
 
 ---
 
-## 11. Version Enumeration Failure
+## 10. Version Enumeration Failure
 
 - **When it happens**: The node cannot list versions due to metadata or storage errors.
 - **Handling**:
@@ -224,7 +210,7 @@ sequenceDiagram
 
 ---
 
-## 12. Shard Reconstruction Failure
+## 11. Shard Reconstruction Failure
 
 - **When it happens**: Collected shards fail integrity checks or reconstruction cannot complete.
 - **Handling**:

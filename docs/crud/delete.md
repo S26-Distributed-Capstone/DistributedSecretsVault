@@ -13,8 +13,7 @@ A client can delete a secret by sending a DELETE request specifying the secret k
 **Error Cases**
 
 - [2. Secret not found](#2-secret-not-found)
-- [3. Authentication failure](#3-authentication-failure)
-- [4. Invalid request](#4-invalid-request)
+- [3. Invalid request](#3-invalid-request)
 
 ---
 
@@ -67,16 +66,7 @@ sequenceDiagram
 
 ---
 
-## 3. Authentication failure
-
-- The client's credentials are missing, expired, or invalid.
-- The request is rejected before reaching the cluster.
-- The client receives: "Unauthorized".
-- **Response**: `401 Unauthorized`
-
----
-
-## 4. Invalid request
+## 3. Invalid request
 
 - The request is malformed, for example the key field is missing or empty.
 - The controller rejects the request during validation before forwarding it.

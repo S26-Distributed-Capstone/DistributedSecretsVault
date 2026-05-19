@@ -21,8 +21,8 @@
 7. **Retries and Idempotency**  
    Safe retries return existing committed outcomes. Duplicate create returns `409`; duplicate identical update is idempotent. This lets clients retry on timeout without risking duplicate state transitions.
 
-8. **Isolation by Caller**  
-   Secrets are scoped by authenticated identity (`user:key:version`) and cross-tenant leakage is prevented. Authorization checks are enforced on every request path before shard access.
+8. **Namespace Isolation**  
+   Secrets are separated into logical namespaces (`user:key:version`) allowing different groups to reuse key names. Pre-condition checks are enforced on every request path before shard access.
 
 9. **Deterministic Failure Semantics**  
    Precondition failures are stable (`409` for duplicate create, `404` for missing update/retrieve/delete). Equivalent requests against equivalent cluster state produce the same status code.
