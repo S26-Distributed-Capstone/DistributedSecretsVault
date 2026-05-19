@@ -16,8 +16,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
-import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
+import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.EmbeddedKafkaKraftBroker;
 
@@ -41,8 +41,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Verifies that a commit broadcast is visible to multiple DSV-style consumers.
  * <p>
- * In production each node uses its own {@code spring.kafka.consumer.group-id} (via
- * {@code NODE_NAME}), so every node consumes the full topic — unlike a shared group where
+ * In production each node uses its own {@code spring.kafka.consumer.group-id}
+ * (via
+ * {@code NODE_NAME}), so every node consumes the full topic — unlike a shared
+ * group where
  * only one consumer would read each partition.
  */
 public class CommitPubSubIntegrationTest {
@@ -89,7 +91,8 @@ public class CommitPubSubIntegrationTest {
                     receiveCommitOnNode(bootstrap, groupId, message.getOperationId(), allNodesSubscribed)));
         }
 
-        // Block until each node consumer has joined the group and been assigned partitions
+        // Block until each node consumer has joined the group and been assigned
+        // partitions
         allNodesSubscribed.await(ASSIGN_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 
         publisher.broadcastCommit(message);
@@ -116,7 +119,8 @@ public class CommitPubSubIntegrationTest {
             UUID expectedOperationId,
             CyclicBarrier allNodesSubscribed) {
         return () -> {
-            try (KafkaConsumer<String, CommitMessage> consumer = new KafkaConsumer<>(consumerProps(bootstrap, groupId))) {
+            try (KafkaConsumer<String, CommitMessage> consumer = new KafkaConsumer<>(
+                    consumerProps(bootstrap, groupId))) {
                 consumer.subscribe(List.of(KafkaConfig.COMMIT_TOPIC));
                 long assignDeadline = System.nanoTime() + ASSIGN_TIMEOUT.toNanos();
                 while (consumer.assignment().isEmpty()) {
@@ -146,9 +150,9 @@ public class CommitPubSubIntegrationTest {
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
-        props.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
-        props.put(JsonDeserializer.VALUE_DEFAULT_TYPE, CommitMessage.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JacksonJsonDeserializer.class);
+        props.put(JacksonJsonDeserializer.TRUSTED_PACKAGES, "*");
+        props.put(JacksonJsonDeserializer.VALUE_DEFAULT_TYPE, CommitMessage.class.getName());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         return props;
@@ -158,7 +162,7 @@ public class CommitPubSubIntegrationTest {
         Map<String, Object> props = new HashMap<>();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JacksonJsonSerializer.class);
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         return new DefaultKafkaProducerFactory<>(props);
     }
