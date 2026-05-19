@@ -14,3 +14,5 @@ images:
   - name: dsv-backend
     newName: docker.io/noambensim/distributed-secrets-vault
     newTag: latest
+patches:
+  - path: patches/app-image-pull-policy.yaml

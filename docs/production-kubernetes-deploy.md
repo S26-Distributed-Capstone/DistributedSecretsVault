@@ -27,17 +27,19 @@ Cluster parameters (10 nodes, Shamir **k=6**, write quorum **m=6**) are set via 
 - Traefik ingress (bundled with k3s)
 - **10 schedulable worker nodes** for the default replica count
 
-## 1. Publish the image to Docker Hub
+## 1. Image on Docker Hub
+
+The cluster pulls [noambensim/distributed-secrets-vault:latest](https://hub.docker.com/r/noambensim/distributed-secrets-vault). Skip this step if that tag is already published.
+
+To build and push a new version:
 
 ```bash
 cp k8s/image.env.example k8s/image.env
-# Edit DOCKERHUB_USERNAME if your Hub user differs
-
 docker login
 ./scripts/docker-build-push.sh
 ```
 
-Or use GitHub Actions (**Publish Docker image**) with `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets.
+Or use GitHub Actions (**Publish Docker image**) with `DOCKERHUB_USERNAME=noambensim` and `DOCKERHUB_TOKEN` secrets.
 
 ## 2. Copy manifests to the remote machine (optional)
 
@@ -45,7 +47,11 @@ Or use GitHub Actions (**Publish Docker image**) with `DOCKERHUB_USERNAME` and `
 scp -r k8s/production user@REMOTE:/tmp/dsv-k8s/
 ```
 
-You only need the YAML directory if applying from that host; the cluster pulls the image from Docker Hub automatically.
+Apply with **`-k`** (Kustomize), not plain `-f`, so the Docker Hub image name is resolved:
+
+```bash
+kubectl apply -k /tmp/dsv-k8s/
+```
 
 ## 3. Validate before apply
 
