@@ -2,7 +2,9 @@
 
 Guide for deploying Distributed Secrets Vault to a cluster with **3 control-plane nodes** and **10 worker nodes**, using manifests in `k8s/production/`.
 
-All resources run in the **`dsv`** namespace (`namespace.yaml` is applied first).
+The DSV app image is pulled from **Docker Hub** on each node (no per-worker `ctr import`). See [docker-hub.md](docker-hub.md) for build, push, and registry setup.
+
+All resources run in the **`dsv`** namespace.
 
 ## What gets deployed
 
@@ -13,166 +15,103 @@ All resources run in the **`dsv`** namespace (`namespace.yaml` is applied first)
 | PVCs | 11 × RWO | 10 × Redis (5Gi) + 1 × Kafka (10Gi) |
 | Services + Ingress | Traefik → `dsv-app-service` | HTTP API on port **9080** |
 
+Default image: `docker.io/noambensim/distributed-secrets-vault:latest` ([Docker Hub](https://hub.docker.com/r/noambensim/distributed-secrets-vault), via Kustomize).
+
 Cluster parameters (10 nodes, Shamir **k=6**, write quorum **m=6**) are set via `JAVA_TOOL_OPTIONS` in `app-statefulset.yaml`.
 
 ## Prerequisites
 
-- `kubectl` on the machine you deploy from, with a valid kubeconfig for the cluster
-- Built image tagged **`dsv-backend:latest`** on **every worker** that can run `dsv-app` (see [Image distribution](#image-distribution))
-- Default **StorageClass** for dynamic PVCs (k3s: `local-path` is typical)
-- Traefik ingress controller (bundled with k3s)
+- `kubectl` with cluster access
+- Image published to Docker Hub (public, or private with `imagePullSecrets`)
+- Default **StorageClass** for PVCs (k3s: `local-path`)
+- Traefik ingress (bundled with k3s)
+- **10 schedulable worker nodes** for the default replica count
 
-## 1. Build the application image (build machine)
+## 1. Publish the image to Docker Hub
 
 ```bash
-cd DistributedSecretsVault
-./mvnw clean package -DskipTests
-mkdir -p target/dependency && (cd target/dependency && jar -xf ../*.jar)
-docker build -t dsv-backend:latest .
-docker save dsv-backend:latest | gzip -9 > dsv-backend.tar.gz
+cp k8s/image.env.example k8s/image.env
+# Edit DOCKERHUB_USERNAME if your Hub user differs
+
+docker login
+./scripts/docker-build-push.sh
 ```
 
-## 2. Copy manifests to the remote machine (scp)
+Or use GitHub Actions (**Publish Docker image**) with `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets.
 
-From your laptop (or CI), upload the production YAML directory:
+## 2. Copy manifests to the remote machine (optional)
 
 ```bash
 scp -r k8s/production user@REMOTE:/tmp/dsv-k8s/
 ```
 
-Optional: upload the image tarball to a jump host or each worker:
+You only need the YAML directory if applying from that host; the cluster pulls the image from Docker Hub automatically.
+
+## 3. Validate before apply
 
 ```bash
-scp dsv-backend.tar.gz user@REMOTE:/tmp/
-```
+kubectl apply -k k8s/production/ --dry-run=client
+# or from remote copy:
+kubectl apply -k /tmp/dsv-k8s/ --dry-run=client
 
-You can apply with `kubectl` from any host that has cluster access; the YAML does not need to live on a control-plane node.
-
-## 3. Load the image on all workers
-
-DSV pods only schedule on **workers**. Import the image on **each of the 10 workers** (not required on control-plane nodes unless they run workloads).
-
-On each worker (after `scp` of the tarball):
-
-```bash
-gunzip -c /tmp/dsv-backend.tar.gz | sudo k3s ctr images import -
-sudo k3s ctr images ls | grep dsv-backend
-```
-
-Loop from your workstation (adjust hosts and SSH user):
-
-```bash
-for host in worker1 worker2 worker3 worker4 worker5 worker6 worker7 worker8 worker9 worker10; do
-  scp dsv-backend.tar.gz user@${host}:/tmp/
-  ssh user@${host} 'gunzip -c /tmp/dsv-backend.tar.gz | sudo k3s ctr images import -'
-done
-```
-
-**Alternative:** push to a private registry, set `image:` in `app-statefulset.yaml`, and add `imagePullSecrets` if needed.
-
-## 4. Validate manifests (before apply)
-
-On the remote machine with `kubectl`:
-
-```bash
-kubectl apply -f /tmp/dsv-k8s/ --dry-run=client
-kubectl diff -f /tmp/dsv-k8s/   # optional; shows changes if upgrading
-```
-
-Check cluster capacity:
-
-```bash
 kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master'
-# Expect 10 Ready workers
-
 kubectl get storageclass
-# Expect a default StorageClass for PVCs
 ```
 
-## 5. Deploy (order matters for first install)
+## 4. Deploy
 
 ```bash
-kubectl apply -f /tmp/dsv-k8s/namespace.yaml
-kubectl apply -f /tmp/dsv-k8s/kafka-service.yaml
-kubectl apply -f /tmp/dsv-k8s/kafka-statefulset.yaml
-kubectl wait -n dsv --for=condition=ready pod/kafka-0 --timeout=300s
-
-kubectl apply -f /tmp/dsv-k8s/app-service.yaml
-kubectl apply -f /tmp/dsv-k8s/app-statefulset.yaml
-kubectl apply -f /tmp/dsv-k8s/ingress.yaml
-```
-
-Or apply everything at once (Kafka may restart apps until it is ready):
-
-```bash
-kubectl apply -f /tmp/dsv-k8s/
+kubectl apply -k k8s/production/
 kubectl get pods -n dsv -w
 ```
 
-Expect:
+Ordered apply (optional):
 
-- `kafka-0` → Running on a worker
-- `dsv-app-0` … `dsv-app-9` → Running (each: `dsv-app` + `redis-sidecar`)
+```bash
+kubectl apply -k k8s/production/ --server-side=false  # or apply resources individually
+kubectl wait -n dsv --for=condition=ready pod/kafka-0 --timeout=300s
+```
 
-## 6. Verify
+Expect `kafka-0` and `dsv-app-0` … `dsv-app-9` Running.
+
+## 5. Verify
 
 ```bash
 kubectl get pods -n dsv -o wide
 kubectl get pvc -n dsv
-kubectl get ingress -n dsv dsv-ingress
+kubectl get ingress -n dsv
 ```
-
-Port-forward (if ingress is not exposed yet):
 
 ```bash
 kubectl port-forward -n dsv svc/dsv-app-service 9080:9080
-curl -s http://127.0.0.1:9080/actuator/health | jq .
-curl -s http://127.0.0.1:9080/api/v1/cluster/status | jq .
-curl -s http://127.0.0.1:9080/api/v1/cluster/nodes | jq .
+curl -s http://127.0.0.1:9080/actuator/health
+curl -s http://127.0.0.1:9080/api/v1/cluster/status
 ```
 
-`cluster/status` should report **10** healthy nodes once ScaleCube has formed the cluster.
-
-Via Traefik (k3s default):
-
-```bash
-curl -s http://<any-worker-or-lb-ip>/actuator/health
-```
-
-## Headlamp
-
-1. Open the cluster in Headlamp and select the **`dsv`** namespace.
-2. **Workloads** → StatefulSets: confirm `dsv-app` (10/10) and `kafka` (1/1).
-3. **Storage** → PVCs: all Bound.
-4. **Network** → Services / Ingress: `dsv-app-service`, `dsv-ingress`.
-5. Use **Pod logs** (`dsv-app` container) if a pod is not Ready.
-6. **Port forward** `dsv-app-service` port **9080** for API tests without DNS.
+Via Traefik: `curl -s http://<worker-or-lb-ip>/actuator/health`
 
 ## Tuning
 
 | Setting | Location | Notes |
 |---------|----------|--------|
-| Replica count | `app-statefulset.yaml` `replicas` | Match worker count for one pod per node |
-| Shamir / quorum | `JAVA_TOOL_OPTIONS` | For `N` nodes: `k = N/2+1`, `m = k` (see demo script) |
-| Ingress host/TLS | `ingress.yaml` | Add `host` and `tls` for production DNS |
-| Image registry | `app-statefulset.yaml` `image` | Replace `dsv-backend:latest` |
-| Storage size | PVC templates | Redis 5Gi, Kafka 10Gi defaults |
+| Docker image | `k8s/production/kustomization.yaml` | `images.newName` / `newTag` |
+| Replica count | `app-statefulset.yaml` | Match worker count |
+| Shamir / quorum | `JAVA_TOOL_OPTIONS` | For `N` nodes: `k = N/2+1`, `m = k` |
+| Ingress host/TLS | `ingress.yaml` | Production DNS |
+| Private Hub repo | `imagePullSecrets` | See [docker-hub.md](docker-hub.md) |
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|--------|-----|
-| `ErrImagePull` / `ImagePullBackOff` | Image missing on that worker | Import `dsv-backend.tar.gz` on that node |
-| `dsv-app-*` Pending | Anti-affinity or no workers | Need 10 schedulable workers; check `kubectl describe pod` |
-| PVC Pending | No StorageClass | Install/configure provisioner (e.g. `local-path`) |
+| `ErrImagePull` / `ImagePullBackOff` | Image missing on Hub, wrong name/tag, or private without secret | `docker pull` from a worker; check kustomization; add pull secret |
+| `ImagePullBackOff` 401 | Private repo | `kubectl create secret docker-registry ...` + `imagePullSecrets` |
+| `dsv-app-*` Pending | Anti-affinity / insufficient workers | Need 10 workers; `kubectl describe pod` |
+| PVC Pending | No StorageClass | Configure `local-path` or other provisioner |
 | 503 on writes | Cluster not fully up | Wait for 10 pods; check `/api/v1/cluster/nodes` |
-| Ingress 404 | Wrong class | `kubectl get ingressclass`; set `ingressClassName: traefik` |
 
 ## Teardown
 
 ```bash
-kubectl delete -f /tmp/dsv-k8s/
-# PVCs are retained by default; delete manually if you need a clean slate:
-# kubectl delete pvc -l app=dsv-app
-# kubectl delete pvc -l app=kafka
+kubectl delete -k k8s/production/
 ```

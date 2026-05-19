@@ -62,3 +62,4 @@ build/
 .env
 .env.local
 .env.*.local
+k8s/image.env

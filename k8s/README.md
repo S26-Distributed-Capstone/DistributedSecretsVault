@@ -2,11 +2,15 @@
 
 This directory contains Kubernetes manifests for Distributed Secrets Vault. The app runs as a StatefulSet, each app pod has a Redis sidecar for shard storage, and Kafka runs as a StatefulSet for commit messaging.
 
+**Deploy with Kustomize** (`kubectl apply -k …`) so the DSV image is resolved to Docker Hub. See [docs/docker-hub.md](../docs/docker-hub.md).
+
 ## Structure
 
 ```text
 k8s/
+├── image.env.example          # Docker Hub user/tag for build/push scripts
 ├── production/
+│   ├── kustomization.yaml     # → docker.io/noambensim/distributed-secrets-vault:latest
 │   ├── namespace.yaml
 │   ├── app-service.yaml
 │   ├── app-statefulset.yaml
@@ -14,12 +18,9 @@ k8s/
 │   ├── kafka-service.yaml
 │   └── kafka-statefulset.yaml
 ├── testing/
-│   ├── namespace.yaml
-│   ├── app-service.yaml
-│   ├── app-statefulset.yaml
-│   ├── ingress.yaml
-│   ├── kafka-service.yaml
-│   └── kafka-statefulset.yaml
+│   ├── kustomization.yaml
+│   ├── patches/
+│   └── …
 └── README.md
 ```
 
@@ -30,40 +31,38 @@ All resources use the **`dsv`** namespace.
 - `dsv-app` is a StatefulSet.
 - Redis runs as a sidecar inside every `dsv-app` pod and persists data through a per-pod PVC.
 - `dsv-app-headless` exposes pod DNS records for ScaleCube peer discovery.
-- `dsv-app-service` load-balances HTTP traffic to healthy app pods on port **9080** (avoids common **8080** conflicts).
+- `dsv-app-service` load-balances HTTP traffic to healthy app pods on port **9080**.
 - Kafka is available at `kafka.dsv.svc.cluster.local:9092`.
 
-The production manifests keep the one-app-pod-per-worker-node placement strategy through node affinity and pod anti-affinity. The testing manifests remove those scheduling constraints for Docker Desktop, Minikube, or K3d.
+Production keeps one app pod per worker node (affinity + anti-affinity). Testing drops those constraints for local clusters.
 
-## Local Testing
-
-Build the local image first:
+## Publish image (Docker Hub)
 
 ```bash
-./mvnw clean package -DskipTests
-mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
-docker build -t dsv-backend:latest .
+cp k8s/image.env.example k8s/image.env
+docker login
+./scripts/docker-build-push.sh
 ```
 
-Then deploy:
+## Testing environment
 
 ```bash
-kubectl apply -f k8s/testing/
+kubectl apply -k k8s/testing/
 kubectl get pods -n dsv -w
 ```
 
-The testing app manifest uses `imagePullPolicy: Never`, so the image must exist in the local cluster's Docker image store.
+Pulls the same Docker Hub image (`imagePullPolicy: IfNotPresent`). For fully offline local images, build and tag locally as `docker.io/noambensim/distributed-secrets-vault:latest` or edit `k8s/testing/kustomization.yaml`.
 
-## Production
+## Production environment
 
-Tuned for **10 worker nodes** (one `dsv-app` pod per worker, Shamir k=6 / quorum m=6). See [docs/production-kubernetes-deploy.md](../docs/production-kubernetes-deploy.md) for scp, image import on all workers, and verification steps.
+Tuned for **10 worker nodes** (Shamir k=6 / quorum m=6). See [docs/production-kubernetes-deploy.md](../docs/production-kubernetes-deploy.md).
 
 ```bash
-kubectl apply -f k8s/production/ --dry-run=client
-kubectl apply -f k8s/production/
+kubectl apply -k k8s/production/ --dry-run=client
+kubectl apply -k k8s/production/
 ```
 
-Before production use, load `dsv-backend:latest` on every worker (or switch to a registry image) and set ingress host/TLS as needed.
+Workers pull [noambensim/distributed-secrets-vault:latest](https://hub.docker.com/r/noambensim/distributed-secrets-vault) automatically.
 
 ## App Environment
 
@@ -80,10 +79,6 @@ Before production use, load `dsv-backend:latest` on every worker (or switch to a
 
 ## ScaleCube Discovery
 
-ScaleCube startup is DNS-based:
-
 - `SEED_DNS_HOST=dsv-app-headless.dsv.svc.cluster.local`
 - `SEED_DNS_PORT=4801`
 - `CLUSTER_PORT=4801`
-
-The headless service exposes port `4801` so each worker can resolve and join active peer pods.
