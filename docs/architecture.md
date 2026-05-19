@@ -2,22 +2,22 @@
 
 1. General architecture
 
-- Client makes requests to the gateway
-- Gateway is set up with HAProxy & keepalived
-- Gateway sends requests to any node in the cluster (leaderless)
+- Client makes requests to the ingress gateway (Traefik)
+- Gateway routes requests to any DSV Worker pod in the cluster
+- The DSV Worker handles API requests and shard storage (unified design)
 
 ```mermaid
 graph LR
     Client([Client])
-    Gateway[Gateway<br/>HAProxy + Keepalived] --> LeaderlessCluster
+    Gateway[Ingress Gateway<br/>Traefik] --> LeaderlessCluster
 
-    subgraph LeaderlessCluster[Leaderless Cluster]
+    subgraph LeaderlessCluster[Kubernetes Cluster]
         direction LR
-        Node1[Cluster Node 1]
-        Node2[Cluster Node 2]
-        Node3[Cluster Node 3]
+        Node1[DSV Worker 1]
+        Node2[DSV Worker 2]
+        Node3[DSV Worker 3]
         Nodes[...]
-        NodeN[Cluster Node N]
+        NodeN[DSV Worker N]
     end
 
     Client -->|HTTP/S Requests| Gateway
@@ -34,11 +34,11 @@ graph LR
 
 3. A User puts a new secret in the storage
 
-- Client sends the secret with the secret's key to any cluster node
-- Gateway attaches request timestamp metadata before forwarding the write
-- Receiving node runs two-phase commit for `user:key`:
-  - voting phase: nodes vote on write-lock ownership
-  - writing phase: lock owner writes shards and then releases lock
+- Client sends the secret with the secret's key to the ingress gateway
+- A DSV Worker receives the request and acts as the Coordinating Node
+- Receiving node attaches request timestamp metadata and starts two-phase commit via Kafka:
+  - ordering phase: node publishes a create intent to the strictly ordered Kafka commit log
+  - writing phase: node distributes shards via ScaleCube and confirms persistence
 - Receiving node applies Shamir's Secret Sharing in memory, splitting the secret into n shards
 - Node distributes n-1 shards to other nodes and keeps 1 shard locally
 - k shards are required to reconstruct the secret (threshold scheme)
@@ -48,23 +48,24 @@ graph LR
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Cluster as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Kafka as Kafka Broker
+    participant Cluster as Peer Nodes
 
-    User->>Gateway: POST /secret {key, value}
-    Gateway->>Gateway: Attach request timestamp metadata
-    Gateway->>Node: Forward request + timestamp metadata
-    Node->>Cluster: Voting phase: request write lock for user:key
-    Cluster-->>Node: Vote ACKs
+    User->>Ingress: POST /secret {key, value}
+    Ingress->>Node: Forward HTTP request
+    Node->>Node: Attach request timestamp metadata
+    Node->>Kafka: Publish create intent for user:key
+    Kafka-->>Node: Acknowledge strict ordering
+    Kafka-->>Cluster: Broadcast intent
     Node->>Node: Split secret into n shards (in memory)<br/>Plaintext never written to disk
     Node->>Cluster: Writing phase: distribute n-1 shards (encrypted in transit)
-    Node->>Node: Store local shard to disk
-    Cluster->>Cluster: Store received shards to disk
+    Node->>Node: Store local shard to Redis
+    Cluster->>Cluster: Store received shards to Redis
     Cluster-->>Node: Write ACK
-    Node->>Cluster: Release write lock
-    Node-->>Gateway: Success + Version
-    Gateway-->>User: Secret stored (version)
+    Node-->>Ingress: Success + Version
+    Ingress-->>User: Secret stored (version)
 ```
 
 ---
@@ -81,28 +82,28 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Cluster as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Cluster as Peer Nodes
 
-    User->>Gateway: GET /secret/{key}?version={v}
-    Gateway->>Node: Forward request
-    Node->>Node: Load local shard from disk
-    Node->>Cluster: Request k-1 additional shards
+    User->>Ingress: GET /secret/{key}?version={v}
+    Ingress->>Node: Forward HTTP request
+    Node->>Node: Load local shard from Redis
+    Node->>Cluster: Request k-1 additional shards via ScaleCube
     Cluster-->>Node: Return shards (encrypted in transit)
     Node->>Node: Reconstruct plaintext in memory<br/>using Shamir's algorithm (k of n shards)
-    Node-->>Gateway: Return secret value
-    Gateway-->>User: Secret value
+    Node-->>Ingress: Return secret value
+    Ingress-->>User: Secret value
 ```
 
 ---
 
 5. A user updates a stored secret (version control)
 
-- Create and update both use the same two-phase commit flow with distributed write locks.
-- Phase 1 (voting phase): nodes vote on lock ownership for `user:key`; writes are blocked on other nodes until lock is released.
-- Phase 2 (writing phase): after lock quorum is reached, shards are distributed and persisted; lock is released after commit/rollback.
-- The gateway attaches request timestamp metadata to incoming write requests.
+- Create and update both use the same two-phase commit flow with Kafka ordering.
+- Phase 1 (ordering phase): node publishes update intent to Kafka; concurrent writes are resolved by commit log order.
+- Phase 2 (writing phase): shards are distributed and persisted to Redis.
+- The DSV Worker attaches request timestamp metadata to incoming write requests.
 - Each successful write returns a new secret version
 - A user can request either a specific version of the secret or the latest
 - Update creates a new set of shards for the new version (independent from previous version shards)
@@ -111,24 +112,24 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node1 as Cluster Node
-    participant Nodes as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node1 as Coordinating Node
+    participant Kafka as Kafka Broker
+    participant Nodes as Peer Nodes
 
-    User->>Gateway: PUT /secret/{key} {new_value}
-    Gateway->>Gateway: Attach request timestamp metadata
-    Gateway->>Node1: Forward update request + timestamp metadata
-    Node1->>Nodes: Voting phase: request write lock for user:key
-    Nodes-->>Node1: Vote responses
-    Node1->>Node1: Lock quorum reached
+    User->>Ingress: PUT /secret/{key} {new_value}
+    Ingress->>Node1: Forward HTTP request
+    Node1->>Node1: Attach request timestamp metadata
+    Node1->>Kafka: Publish update intent for user:key
+    Kafka-->>Node1: Acknowledge strict ordering
+    Kafka-->>Nodes: Broadcast intent
     Node1->>Node1: Split new secret value into n shards (in memory)<br/>Plaintext never written to disk
     Node1->>Nodes: Writing phase: distribute n-1 shards with new version
-    Node1->>Node1: Store local shard to disk
-    Nodes->>Nodes: Store received shards to disk
+    Node1->>Node1: Store local shard to Redis
+    Nodes->>Nodes: Store received shards to Redis
     Nodes-->>Node1: Write ACK
-    Node1->>Nodes: Release write lock
-    Node1-->>Gateway: Success + New Version
-    Gateway-->>User: Secret updated (version: N+1)
+    Node1-->>Ingress: Success + New Version
+    Ingress-->>User: Secret updated (version: N+1)
 ```
 
 ---
@@ -144,17 +145,20 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Cluster as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Kafka as Kafka Broker
+    participant Cluster as Peer Nodes
 
-    User->>Gateway: DELETE /secret {key}
-    Gateway->>Node: Forward delete request
-    Node->>Cluster: Broadcast delete for key shards
+    User->>Ingress: DELETE /secret {key}
+    Ingress->>Node: Forward HTTP request
+    Node->>Kafka: Publish delete intent for user:key (strict ordering)
+    Kafka-->>Node: Acknowledge ordering
+    Node->>Cluster: Broadcast delete for key shards via ScaleCube
     Cluster-->>Node: Delete ACKs
     Node->>Node: Verify ACK count >= m-k+1
-    Node-->>Gateway: Success (non-reconstructable)
-    Gateway-->>User: Secret deleted
+    Node-->>Ingress: Success (non-reconstructable)
+    Ingress-->>User: Secret deleted
 ```
 
 ---
@@ -204,6 +208,6 @@ graph LR
 
 9. Node failure recovery
 
-- If failure occurs in the **voting phase**, no shard writes are committed and lock requests expire/rollback.
-- If failure occurs in the **writing phase**, partially written shards are rolled back using the write transaction ID before lock release.
-- Recovered nodes rejoin automatically and only accept writes after lock state is synchronized.
+- If failure occurs in the **ordering phase**, no shard writes are committed and the request fails.
+- If failure occurs in the **writing phase**, partially written shards are rolled back.
+- Recovered nodes rejoin automatically via ScaleCube and synchronize state from Kafka and peers.

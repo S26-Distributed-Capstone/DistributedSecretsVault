@@ -13,8 +13,8 @@ A client can update a secret only if a secret with that key already exists. The 
 
 **Error Cases**
 
-- [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
-- [4. Gateway metadata missing or invalid](#4-gateway-metadata-missing-or-invalid)
+- [3. Ingress unable to forward request to node](#3-ingress-unable-to-forward-request-to-node)
+- [4. Coordinating Node metadata missing or invalid](#4-coordinating-node-metadata-missing-or-invalid)
 - [5. M nodes do not send back confirmation for receiving update](#5-m-nodes-do-not-send-back-confirmation-for-receiving-update)
 - [6. M nodes do not send back confirmation for persisting update](#6-m-nodes-do-not-send-back-confirmation-for-persisting-update)
 - [7. Client does not receive response](#7-client-does-not-receive-response)
@@ -23,27 +23,29 @@ A client can update a secret only if a secret with that key already exists. The 
 
 ## 1. Update one secret
 
-- A client submits an updated secret through the gateway, and the gateway forwards the request into the cluster where one node picks it up.
-- The receiving node validates that the key already exists, then starts two-phase commit for `user:key`.
-- In the **voting phase**, nodes vote on write-lock ownership for the key and block competing writes until lock release.
-- In the **writing phase**, the lock owner splits the updated secret into n shards and sends update shards to peers, where each node stages its shard in temporary in-memory state.
-- The receiving node then submits a persistence request for the new version to all nodes and returns success after m persistence confirmations.
+- A client submits an updated secret through the ingress gateway (Traefik), which routes it to a DSV Worker (acting as the Coordinating Node).
+- The Coordinating Node validates that the key already exists locally, attaches timestamp metadata, and starts the two-phase commit process via Kafka.
+- In the **ordering phase**, the node publishes an update intent to the Kafka commit log. All nodes consume this log to establish a globally agreed-upon order.
+- In the **writing phase**, the Coordinating Node splits the updated secret into n shards using Shamir's algorithm, sends update shards to peer nodes (via ScaleCube), and each node stages its shard in temporary in-memory state.
+- The Coordinating Node then submits a persistence request for the new version to all nodes and returns success after m persistence confirmations.
 - **Response**: `200 OK`
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Peers as Other Nodes
-    User->>Gateway: PUT /secret {key,newValue}
-    Gateway->>Gateway: Attach request timestamp metadata
-    Gateway->>Node: Forward request + timestamp metadata
-    Node->>Peers: Voting phase: request write lock for user:key
-    Peers-->>Node: Vote confirmations
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Kafka as Kafka Broker
+    participant Peers as Peer Nodes
+    User->>Ingress: PUT /secret {key,newValue}
+    Ingress->>Node: Forward HTTP request
+    Node->>Node: Attach request timestamp metadata
+    Node->>Kafka: Publish update intent for user:key
+    Kafka-->>Node: Acknowledge strict ordering
+    Kafka-->>Peers: Broadcast update intent
     Node->>Node: Split updated secret into n shards using Shamir's algorithm
     Node->>Peers: Writing phase: send update shards with key and version
-    Peers->>Peers: Store shard temporarily and check key/version state
+    Peers->>Peers: Store shard temporarily and validate intent
     Node->>Node: Add local confirmation if key is persisted locally
     Peers-->>Node: Return confirmation if update is valid
     Node->>Node: Wait for confirmations from m nodes
@@ -51,10 +53,9 @@ sequenceDiagram
     Node->>Node: Persist local versioned shard
     Peers->>Peers: Persist versioned shards
     Peers-->>Node: Send persistence confirmation
-    Node->>Node: Wait for persistence confirmations from m nodes
-    Node->>Peers: Release write lock
-    Node-->>Gateway: Return success confirmation
-    Gateway-->>User: "Secret Updated"
+    Node->>Node: Wait for persistence confirmations from m - 1 nodes
+    Node-->>Ingress: Return success confirmation
+    Ingress-->>User: "Secret Updated"
 ```
 
 ---
@@ -62,66 +63,70 @@ sequenceDiagram
 ## 2. Concurrent updates to the same secret
 
 - Two update requests for the same key may be processed concurrently by different nodes.
-- Nodes and peers use persisted state, temporary state, and voting-phase lock ownership to resolve which update proceeds first.
-- The earlier update continues through quorum and persistence, while the later conflicting update is rejected or retried with a newer version.
+- Instead of peer-to-peer voting, the nodes publish their update intents to Kafka.
+- Kafka strictly orders the requests. The request that appears first in the commit log continues through quorum and persistence as version V+1.
+- The node handling the later request observes the conflict from the commit log and aborts or prompts a retry for version V+2.
 - The client receives success for the accepted update and an error for the rejected one.
 - **Response**: `200 OK` for the accepted update; `409 Conflict` for the rejected update
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Peers as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node1 as Node 1 (Coord)
+    participant Node2 as Node 2 (Coord)
+    participant Kafka as Kafka Broker
+    participant Peers as Peer Nodes
+    
     par Update 1
-      User->>Gateway: PUT /secret {key,valueA}
-      Gateway->>Gateway: Attach request timestamp metadata
-      Gateway->>Node: Forward request + timestamp metadata
-      Node->>Peers: Voting phase: request write lock for user:key
-      Peers-->>Node: Lock vote success (arrived first)
-      Node->>Node: Split updated secret into n shards
-      Node->>Peers: Writing phase: send update shards for version V+1
-      Peers->>Peers: Store shard temporarily and check key/version state.<br>This update arrived first
-      Node->>Node: Check persisted and temporary key/version state.<br>This update arrived first
-      Node->>Node: Add local confirmation
-      Peers-->>Node: Return confirmation for version V+1
-      Node->>Node: Wait for confirmations from m nodes
+      User->>Ingress: PUT /secret {key,valueA}
+      Ingress->>Node1: Forward HTTP request
+      Node1->>Node1: Attach timestamp
+      Node1->>Kafka: Publish intent (arrives 1st)
     and Update 2
-      User->>Gateway: PUT /secret {same key, valueB}
-      Gateway->>Gateway: Attach request timestamp metadata
-      Gateway->>Node: Forward request + timestamp metadata
-      Node->>Peers: Voting phase: request write lock for user:key
-      Peers-->>Node: Lock vote failure (arrived second)
-      Node-->>Gateway: Send error on failure response(s) or timeout
-      break after error is sent to user
-        Gateway-->>User: "Update 2 failed"
-      end
+      User->>Ingress: PUT /secret {same key, valueB}
+      Ingress->>Node2: Forward HTTP request
+      Node2->>Node2: Attach timestamp
+      Node2->>Kafka: Publish intent (arrives 2nd)
     end
-    Node->>Peers: Submit persistence request for version V+1
-    Node->>Node: Persist local versioned shard
-    Peers->>Peers: Persist versioned shards
-    Peers-->>Node: Send persistence confirmation
-    Node->>Node: Wait for persistence confirmations from m nodes
-    Node->>Peers: Release write lock
-    Node-->>Gateway: Return success confirmation
-    Gateway-->>User: "Update 1 Accepted"
+    
+    Kafka-->>Node1: Broadcast intent 1 (Wins)
+    Kafka-->>Node2: Broadcast intent 1 (Notices conflict)
+    
+    Note over Node2: Node 2 aborts update for Secret 2
+    Node2-->>Ingress: Return 409 Conflict
+    Ingress-->>User: "Update 2 failed"
+    
+    Note over Node1: Node 1 proceeds with Secret 1
+    Node1->>Node1: Split updated secret into n shards
+    Node1->>Peers: Writing phase: send shards for version V+1
+    Peers->>Peers: Store shard temporarily
+    Peers-->>Node1: Return confirmation
+    Node1->>Node1: Wait for confirmations from m nodes
+    Node1->>Peers: Submit persistence request for version V+1
+    Node1->>Node1: Persist local shard
+    Peers->>Peers: Persist shards
+    Peers-->>Node1: Send persistence confirmation
+    Node1->>Node1: Wait for persistence confirmations
+    Node1-->>Ingress: Return success confirmation
+    Ingress-->>User: "Update 1 Accepted"
 ```
 
 ---
 
-## 3. Gateway unable to forward request to node
+## 3. Ingress unable to forward request to node
 
-- The gateway attempts to forward an update request into the cluster so a node can pick it up.
-- If forwarding times out, the gateway retries with another node.
-- After repeated timeouts, the gateway returns: "Could not forward request to node".
+- The Traefik ingress attempts to forward an update request into the cluster so a node can pick it up.
+- If forwarding times out, the ingress retries with another node based on load balancing configuration.
+- After repeated timeouts, the ingress returns a failure.
 - **Response**: `503 Service Unavailable`
 
 ---
 
-## 4. Gateway metadata missing or invalid
+## 4. Coordinating Node metadata missing or invalid
 
-- The node requires gateway-attached timestamp metadata before starting write coordination.
-- If metadata is missing or invalid, update cannot continue.
+- The coordinating node requires a valid timestamp and metadata to publish the intent to Kafka.
+- If metadata generation fails, update cannot continue.
 - The client receives: "Secret update error - invalid request metadata".
 - **Response**: `503 Service Unavailable`
 

@@ -24,7 +24,7 @@ In every case the receiving node collects at least k shards (the reconstruction 
 - [5. Version Not Found](#5-version-not-found)
 - [6. Insufficient Shards](#6-insufficient-shards)
 - [7. Not Authorized to Access Secret](#7-not-authorized-to-access-secret)
-- [8. Gateway Unavailable](#8-gateway-unavailable)
+- [8. Ingress Unavailable](#8-ingress-unavailable)
 - [9. Node Unavailable](#9-node-unavailable)
 - [10. Local Shard Read Failure](#10-local-shard-read-failure)
 - [11. Version Enumeration Failure](#11-version-enumeration-failure)
@@ -35,10 +35,10 @@ In every case the receiving node collects at least k shards (the reconstruction 
 ## 1. Retrieve Latest Version
 
 - Client sends a GET request for a secret key without specifying a version
-- Gateway forwards the request to any cluster node (leaderless routing)
-- Receiving node consults replicated key metadata to resolve the current latest version number
+- Traefik ingress forwards the request to any DSV Worker (Coordinating Node)
+- Coordinating Node consults replicated key metadata to resolve the current latest version number
 - Node loads its own local shard for `user:key:latest-version` from durable storage
-- Node requests k-1 additional shards from peer nodes
+- Node requests k-1 additional shards from peer nodes via ScaleCube
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (k of n shards)
 - Secret value is returned to the client; plaintext is cleared from memory immediately
 - **Response**: `200 OK`
@@ -46,19 +46,19 @@ In every case the receiving node collects at least k shards (the reconstruction 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Peers as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Peers as Peer Nodes
 
-    User->>Gateway: GET /secret/{key}
-    Gateway->>Node: Forward request
+    User->>Ingress: GET /secret/{key}
+    Ingress->>Node: Forward HTTP request
     Node->>Node: Resolve latest version from replicated metadata for {key}
     Node->>Node: Load local shard for user:key:version from storage
     Node->>Peers: Request k-1 shards for user:key:version
     Peers-->>Node: Return shards (encrypted in transit)
     Node->>Node: Reconstruct plaintext in memory<br/>using Shamir's algorithm (k of n shards)
-    Node-->>Gateway: Return secret value + version
-    Gateway-->>User: Secret value + version
+    Node-->>Ingress: Return secret value + version
+    Ingress-->>User: Secret value + version
 ```
 
 ---
@@ -66,10 +66,10 @@ sequenceDiagram
 ## 2. Retrieve Specific Version
 
 - Client sends a GET request for a secret key with an explicit version number
-- Gateway forwards the request to any cluster node
-- Receiving node skips version resolution — it uses the requested version directly
+- Traefik ingress forwards the request to any DSV Worker (Coordinating Node)
+- Coordinating Node skips version resolution — it uses the requested version directly
 - Node loads its own local shard for `user:key:requested-version` from durable storage
-- Node requests k-1 additional shards from peer nodes for the same version
+- Node requests k-1 additional shards from peer nodes via ScaleCube for the same version
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (k of n shards)
 - Secret value for the requested version is returned to the client; plaintext is cleared from memory
 - **Response**: `200 OK`
@@ -77,19 +77,19 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Peers as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Peers as Peer Nodes
 
-    User->>Gateway: GET /secret/{key}?version={v}
-    Gateway->>Node: Forward request
+    User->>Ingress: GET /secret/{key}?version={v}
+    Ingress->>Node: Forward HTTP request
     Node->>Node: Load local shard for user:key:v from storage
     Node->>Peers: Request k-1 shards for user:key:v
     Peers-->>Node: Return shards (encrypted in transit)
     Node->>Node: Reconstruct plaintext in memory<br/>using Shamir's algorithm (k of n shards)
     Node->>Node: Clear plaintext from memory
-    Node-->>Gateway: Return secret value + version
-    Gateway-->>User: Secret value (version: v)
+    Node-->>Ingress: Return secret value + version
+    Ingress-->>User: Secret value (version: v)
 ```
 
 ---
@@ -97,9 +97,9 @@ sequenceDiagram
 ## 3. Retrieve All Versions
 
 - Client sends a GET request for a secret key requesting all versions
-- Gateway forwards the request to any cluster node
-- Receiving node queries its local storage to enumerate all known versions of `user:key`
-- For each version, the node loads its local shard and requests k-1 shards from peers
+- Traefik ingress forwards the request to any DSV Worker (Coordinating Node)
+- Coordinating Node queries its local storage to enumerate all known versions of `user:key`
+- For each version, the node loads its local shard and requests k-1 shards from peers via ScaleCube
 - Each version's plaintext is reconstructed independently in memory and added to the result map
 - Plaintext for each version is cleared from memory as soon as it is added to the map
 - Node returns the complete map of version → secret value to the client
@@ -108,12 +108,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Peers as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Peers as Peer Nodes
 
-    User->>Gateway: GET /secret/{key}/versions
-    Gateway->>Node: Forward request
+    User->>Ingress: GET /secret/{key}/versions
+    Ingress->>Node: Forward HTTP request
     Node->>Node: Enumerate all stored versions for user:key
     loop For each version V
         Node->>Node: Load local shard for user:key:V from storage
@@ -122,8 +122,8 @@ sequenceDiagram
         Node->>Node: Reconstruct plaintext in memory<br/>using Shamir's algorithm (k of n shards)
         Node->>Node: Add V → secret value to result map<br/>Clear plaintext from memory
     end
-    Node-->>Gateway: Return map {version → secret value}
-    Gateway-->>User: Map of all versions to secret values
+    Node-->>Ingress: Return map {version → secret value}
+    Ingress-->>User: Map of all versions to secret values
 ```
 
 ---
@@ -168,7 +168,7 @@ sequenceDiagram
 
 - **When it happens**: Authentication fails or authorization rules deny access.
 - **Handling**:
-    - Reject early at the gateway when possible; nodes still enforce authorization on every request.
+    - Reject early at the ingress when possible; nodes still enforce authorization on every request.
     - Return `401 Unauthorized` for invalid/expired credentials, `403 Forbidden` for valid but insufficient access.
     - Do not indicate whether the secret exists.
     - Audit log the denial with request metadata (no plaintext).
@@ -176,14 +176,14 @@ sequenceDiagram
 
 ---
 
-## 8. Gateway Unavailable
+## 8. Ingress Unavailable
 
-- **When it happens**: The gateway is unreachable or returns errors to the client.
+- **When it happens**: The Traefik ingress is unreachable or returns errors to the client.
 - **Handling**:
     - Clients should retry with exponential backoff and jitter.
-    - Gateways should be stateless and horizontally scaled behind a load balancer.
-    - Use health checks and circuit breakers to avoid routing to unhealthy gateways.
-    - Return `503 Service Unavailable` when the gateway is overloaded.
+    - Ingress instances should be stateless and horizontally scaled behind a load balancer.
+    - Use health checks and circuit breakers to avoid routing to unhealthy ingress pods.
+    - Return `503 Service Unavailable` when the ingress is overloaded.
 - **Response**: `503 Service Unavailable`
 
 ---
@@ -192,7 +192,7 @@ sequenceDiagram
 
 - **When it happens**: The target node is down or unreachable.
 - **Handling**:
-    - Gateway retries on another node; routing is leaderless.
+    - Ingress retries on another node; routing is leaderless.
     - Node-to-node shard requests use timeouts and fall back to other peers.
     - If a receiving node cannot reach enough peers to reach k shards, treat as insufficient shards.
     - Track node health and quarantine flapping nodes temporarily.

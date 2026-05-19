@@ -7,10 +7,10 @@
    Reads collect at least `k` shards and reconstruct only in memory. If fewer than `k` shards are available, the read fails deterministically instead of returning partial or stale data.
 
 3. **Create vs Update Under Concurrency**  
-   Create requires non-existent key; update requires existing key. Both use the same lock-based two-phase write flow. This keeps write ordering consistent while preserving operation-specific preconditions.
+   Create requires non-existent key; update requires existing key. Both use the same Kafka-based two-phase write flow. This keeps write ordering consistent while preserving operation-specific preconditions.
 
 4. **Versioning and Time Metadata**  
-   The gateway attaches request timestamp metadata. Versions are committed in per-key lock order. This avoids relying on a global clock source while maintaining monotonic per-key history.
+   The DSV Worker attaches request timestamp metadata. Versions are committed in per-key Kafka order. This avoids relying on a global clock source while maintaining monotonic per-key history.
 
 5. **History and Validity Intervals**  
    Each version is independently stored and retrievable. `valid_from`/`valid_to` define active intervals. Intervals are updated during commits so historical reads can be served without ambiguity.
@@ -31,8 +31,8 @@
     `enc(NAME)` and `secret(NAME)` processing is all-or-nothing; failures roll back staged writes. Callers receive either a fully transformed file or a single error response.
 
 11. **Failure Phases for Writes**  
-    - **Voting phase failure**: lock quorum not reached; no commit.  
-    - **Writing phase failure**: lock held but write quorum fails; partial writes roll back.
+    - **Ordering phase failure**: Kafka commit log write failed; no intent published.  
+    - **Writing phase failure**: intent published but write quorum fails; partial writes roll back.
     Phase separation makes recovery behavior explicit and prevents ambiguous outcomes for in-flight writes.
 
 12. **Recovery and Availability**  

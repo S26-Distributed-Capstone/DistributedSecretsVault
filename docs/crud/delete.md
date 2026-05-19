@@ -20,49 +20,40 @@ A client can delete a secret by sending a DELETE request specifying the secret k
 
 ## 1. Delete one secret
 
-- The client sends a DELETE request to the gateway specifying the secret key.
-- The gateway forwards the request to the cluster; the receiving node broadcasts the delete to all n nodes.
+- The client sends a DELETE request to the ingress gateway (Traefik), which routes it to a DSV Worker (acting as the Coordinating Node).
+- The Coordinating Node attaches timestamp metadata and publishes a delete intent to the Kafka commit log.
+- Kafka establishes strict ordering for the delete operation relative to any concurrent updates.
+- The Coordinating Node broadcasts the delete command to all peer nodes (via ScaleCube).
 - Each node checks its local storage for a shard matching the key, deletes it, and returns an acknowledgment.
-- After m − k + 1 acknowledgments are received (or the timeout is reached with that threshold met), the deletion is confirmed and the client receives a 204 No Content response.
+- After m − k + 1 acknowledgments are received, the deletion is confirmed (ensuring fewer than k shards remain).
 - **Response**: `204 No Content`
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant Controller as SecretController
-    participant Service as DeleteSecretService
-    participant Node1 as Cluster Node 1
-    participant Node2 as Cluster Node 2
-    participant NodeN as Cluster Node N
+    participant User
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Kafka as Kafka Broker
+    participant Peers as Peer Nodes
 
-    Client->>Controller: DELETE /secret/{key}
-    activate Controller
-    Controller->>Controller: Validate DeleteSecretRequest
-    Controller->>Service: invoke delete(key)
-    activate Service
-    Service->>Node1: Broadcast delete shard request
-    Service->>Node2: Broadcast delete shard request
-    Service->>NodeN: Broadcast delete shard request
+    User->>Ingress: DELETE /secret/{key}
+    Ingress->>Node: Forward HTTP request
+    Node->>Node: Attach request timestamp metadata
+    Node->>Kafka: Publish delete intent for user:key
+    Kafka-->>Node: Acknowledge strict ordering
+    Kafka-->>Peers: Broadcast delete intent
+    Node->>Peers: Broadcast delete shard request (via ScaleCube)
+    
+    par Node 1 (Local)
+        Node->>Node: Find shard for key & delete
+    and Peer Nodes
+        Peers->>Peers: Find shard for key & delete
+        Peers-->>Node: Return success acknowledgment
+    end
 
-    activate Node1
-    Node1->>Node1: Find shard for key
-    Node1->>Service: Return success acknowledgment
-    deactivate Node1
-
-    activate Node2
-    Node2->>Node2: Find shard for key
-    Node2->>Service: Return success acknowledgment
-    deactivate Node2
-
-    activate NodeN
-    NodeN->>NodeN: Find shard for key
-    NodeN->>Service: Return success acknowledgment
-    deactivate NodeN
-
-    Service->>Service: Collect acknowledgments (threshold: m − k + 1)
-    deactivate Service
-    Controller-->>Client: 204 No Content
-    deactivate Controller
+    Node->>Node: Collect acknowledgments (threshold: m − k + 1)
+    Node-->>Ingress: Return 204 No Content
+    Ingress-->>User: 204 No Content
 ```
 
 ---

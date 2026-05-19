@@ -13,10 +13,10 @@ A client can create a secret only if no secret with the same key already exists.
 
 **Error Cases**
 
-- [3. Gateway unable to forward request to node](#3-gateway-unable-to-forward-request-to-node)
+- [3. Ingress unable to forward request to node](#3-ingress-unable-to-forward-request-to-node)
 - [4. Key is already persisted on the receiving node](#4-key-is-already-persisted-on-the-receiving-node)
 - [5. Key is already persisted on another node](#5-key-is-already-persisted-on-another-node)
-- [6. Gateway metadata missing or invalid](#6-gateway-metadata-missing-or-invalid)
+- [6. Coordinating Node metadata missing or invalid](#6-coordinating-node-metadata-missing-or-invalid)
 - [7. M nodes do not send back confirmation for receiving secret](#7-m-nodes-do-not-send-back-confirmation-for-receiving-secret)
 - [8. M nodes do not send back confirmation for persisting secret](#8-m-nodes-do-not-send-back-confirmation-for-persisting-secret)
 - [9. Client does not receive response](#9-client-does-not-receive-response)
@@ -26,39 +26,40 @@ A client can create a secret only if no secret with the same key already exists.
 
 ## 1. Create one secret
 
-- A client submits a secret through the gateway, and the gateway forwards the request into the cluster where one node picks it up.
-- The receiving node validates that the key does not already exist, then starts two-phase commit for `user:key`.
-- In the **voting phase**, nodes vote on write-lock ownership for the key and block competing writes until lock release.
-- In the **writing phase**, the lock owner splits the secret into n shards, sends shards to peers, and each node stages its shard in temporary in-memory state.
-- The receiving node then submits a persistence request to all nodes and returns success after m persistence confirmations.
+- A client submits a secret through the ingress gateway (Traefik), which routes it to a DSV Worker (acting as the Coordinating Node).
+- The Coordinating Node validates that the key does not already exist locally, attaches timestamp metadata, and starts the two-phase commit process via Kafka.
+- In the **ordering phase**, the node publishes a create intent to the Kafka commit log. All nodes consume this log to establish a globally agreed-upon order, resolving concurrent write races.
+- In the **writing phase**, the Coordinating Node splits the secret into n shards using Shamir's algorithm, sends shards to peer nodes (via ScaleCube), and each node stages its shard in temporary in-memory state.
+- The Coordinating Node then submits a persistence request to all nodes and returns success after m persistence confirmations.
 - **Response**: `201 Created`
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Peers as Other Nodes
-    User->>Gateway: POST /secret {key,value}
-    Gateway->>Gateway: Attach request timestamp metadata
-    Gateway->>Node: Forward request + timestamp metadata
+    participant Ingress as Traefik Ingress
+    participant Node as Coordinating Node
+    participant Kafka as Kafka Broker
+    participant Peers as Peer Nodes
+    User->>Ingress: POST /secret {key,value}
+    Ingress->>Node: Forward HTTP request
     Node->>Node: Check whether key is already persisted locally
-    Node->>Peers: Voting phase: request write lock for user:key
-    Peers-->>Node: Vote confirmations
+    Node->>Node: Attach request timestamp metadata
+    Node->>Kafka: Publish create intent for user:key
+    Kafka-->>Node: Acknowledge strict ordering
+    Kafka-->>Peers: Broadcast create intent
     Node->>Node: Split secret into n shards using Shamir's algorithm
     Node->>Peers: Writing phase: send n-1 shards to other nodes
-    Peers->>Peers: Store shard temporarily and check key state
+    Peers->>Peers: Store shard temporarily and validate intent
     Node->>Node: Add local confirmation
-    Peers-->>Node: Return confirmation or error (key already exists / lock contention)
+    Peers-->>Node: Return confirmation or error
     Node->>Node: Wait for confirmations from m nodes
     Node->>Peers: Submit persistence request for shards
     Node->>Node: Persist local shard
     Peers->>Peers: Persist shards
     Peers-->>Node: Send persistence confirmation
     Node->>Node: Wait for persistence confirmations from m - 1 nodes
-    Node->>Peers: Release write lock
-    Node-->>Gateway: Return success confirmation
-    Gateway-->>User: "Secret Created"
+    Node-->>Ingress: Return success confirmation
+    Ingress-->>User: "Secret Created"
 ```
 
 ---
@@ -66,60 +67,62 @@ sequenceDiagram
 ## 2. Create two secrets
 
 - Two create requests with the same key may be processed concurrently by different nodes.
-- Nodes and peers use persisted state, temporary state, and voting-phase lock ownership to resolve the conflict.
-- The earlier request continues through quorum and persistence, while the later request is rejected.
+- Instead of peer-to-peer voting, the nodes publish their create intents to Kafka.
+- Kafka strictly orders the requests. The request that appears first in the commit log continues through quorum and persistence.
+- The node handling the later request observes the conflict from the commit log and aborts.
 - The client receives success for the earlier request and an error for the later one.
 - **Response**: `201 Created` for the earlier request; `409 Conflict` for the later request
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway
-    participant Node as Cluster Node
-    participant Peers as Other Nodes
+    participant Ingress as Traefik Ingress
+    participant Node1 as Node 1 (Coord)
+    participant Node2 as Node 2 (Coord)
+    participant Kafka as Kafka Broker
+    participant Peers as Peer Nodes
+    
     par Secret 1
-      User->>Gateway: POST /secret {key,value}
-      Gateway->>Gateway: Attach request timestamp metadata
-      Gateway->>Node: Forward request + timestamp metadata
-      Node->>Node: Check whether key is already persisted locally
-      Node->>Peers: Voting phase: request write lock for user:key
-      Peers-->>Node: Lock vote success (arrived first)
-      Node->>Node: Split secret into n shards using Shamir's algorithm
-      Node->>Peers: Writing phase: send n-1 shards to other nodes
-      Peers->>Peers: Store shard temporarily and check key state.<br>Key is in temporary storage, and this request came first
-      Node->>Node: Check temporary key state.<br>Key is in temporary storage, and this request came first
-      Node->>Node: Add local confirmation
-      Peers-->>Node: Return confirmation because key is not persisted
-      Node->>Node: Wait for confirmations from m nodes
+      User->>Ingress: POST /secret {key, value A}
+      Ingress->>Node1: Forward HTTP request
+      Node1->>Node1: Attach timestamp
+      Node1->>Kafka: Publish intent (arrives 1st)
     and Secret 2
-      User->>Gateway: POST /secret {same key as secret 1, value (may differ)}
-      Gateway->>Gateway: Attach request timestamp metadata
-      Gateway->>Node: Forward request + timestamp metadata
-      Node->>Node: Check whether key is already persisted locally
-      Node->>Peers: Voting phase: request write lock for user:key
-      Peers-->>Node: Lock vote failure (request arrived second)
-      Node-->>Gateway: Send error on failure response(s) or timeout
-      break after error is sent to user
-        Gateway-->>User: "Secret 2 failed to create"
-      end
+      User->>Ingress: POST /secret {key, value B}
+      Ingress->>Node2: Forward HTTP request
+      Node2->>Node2: Attach timestamp
+      Node2->>Kafka: Publish intent (arrives 2nd)
     end
-    Node->>Peers: Submit persistence request for shards
-    Node->>Node: Persist local shard
+    
+    Kafka-->>Node1: Broadcast intent 1 (Wins)
+    Kafka-->>Node2: Broadcast intent 1 (Notices conflict)
+    
+    Note over Node2: Node 2 aborts creation for Secret 2
+    Node2-->>Ingress: Return 409 Conflict
+    Ingress-->>User: "Secret 2 failed to create"
+    
+    Note over Node1: Node 1 proceeds with Secret 1
+    Node1->>Node1: Split secret into n shards
+    Node1->>Peers: Writing phase: send shards to other nodes
+    Peers->>Peers: Store shard temporarily
+    Peers-->>Node1: Return confirmation
+    Node1->>Node1: Wait for confirmations from m nodes
+    Node1->>Peers: Submit persistence request for shards
+    Node1->>Node1: Persist local shard
     Peers->>Peers: Persist shards
-    Peers-->>Node: Send persistence confirmation
-    Node->>Node: Wait for persistence confirmations from m nodes
-    Node->>Peers: Release write lock
-    Node-->>Gateway: Return success confirmation
-    Gateway-->>User: "Secret 1 Created"
+    Peers-->>Node1: Send persistence confirmation
+    Node1->>Node1: Wait for persistence confirmations
+    Node1-->>Ingress: Return success confirmation
+    Ingress-->>User: "Secret 1 Created"
 ```
 
 ---
 
-## 3. Gateway unable to forward request to node
+## 3. Ingress unable to forward request to node
 
-- The gateway attempts to forward a create request to a cluster node.
-- If forwarding times out, the gateway retries with another node.
-- After repeated timeouts, the gateway returns: "Could not forward request to node".
+- The Traefik ingress attempts to forward a create request to a cluster node.
+- If forwarding times out, the ingress retries with another node based on its load balancing configuration.
+- After repeated timeouts, the ingress returns a failure.
 - **Response**: `503 Service Unavailable`
 
 ---
@@ -142,10 +145,10 @@ sequenceDiagram
 
 ---
 
-## 6. Gateway metadata missing or invalid
+## 6. Coordinating Node metadata missing or invalid
 
-- The node requires gateway-attached timestamp metadata before starting write coordination.
-- If metadata is missing or invalid, creation cannot continue.
+- The coordinating node requires a valid timestamp and metadata to publish the intent to Kafka.
+- If metadata generation fails, creation cannot continue.
 - The client receives: "Secret creation error - invalid request metadata".
 - **Response**: `503 Service Unavailable`
 
