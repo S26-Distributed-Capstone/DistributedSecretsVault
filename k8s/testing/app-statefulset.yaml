@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: dsv-app
-  namespace: default
+  namespace: dsv
 spec:
   # Max 12 nodes based on config. Missing nodes will stay pending (Standby behavior).
   replicas: 3
@@ -22,8 +22,11 @@ spec:
           ports:
             - containerPort: 4801
               name: cluster
-            - containerPort: 8080
+            - containerPort: 9080
+              name: http
           env:
+            - name: SERVER_PORT
+              value: "9080"
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
@@ -35,7 +38,7 @@ spec:
             - name: CLUSTER_PORT
               value: "4801"
             - name: SEED_DNS_HOST
-              value: "dsv-app-headless.default.svc.cluster.local"
+              value: "dsv-app-headless.dsv.svc.cluster.local"
             - name: SEED_DNS_PORT
               value: "4801"
             # Sidecar redis is reachable via localhost
@@ -48,7 +51,7 @@ spec:
             - name: SPRING_PROFILES_ACTIVE
               value: "dev"
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka.default.svc.cluster.local:9092"
+              value: "kafka.dsv.svc.cluster.local:9092"
         # Redis Sidecar container within the same Pod
         - name: redis-sidecar
           image: redis:8.6-alpine

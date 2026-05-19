@@ -1,6 +1,6 @@
 # Kubernetes Architecture and Configuration
 
-The Kubernetes deployment runs DSV as a leaderless app cluster with per-node Redis sidecars and a Kafka broker.
+The Kubernetes deployment runs DSV as a leaderless app cluster with per-node Redis sidecars and a Kafka broker. All manifests use the **`dsv`** namespace.
 
 ## High-Level Architecture
 
@@ -46,18 +46,18 @@ This keeps shard storage local to the DSV pod while still allowing Kubernetes to
 
 `dsv-app-headless` is a headless service that returns DNS records for app pods. ScaleCube uses:
 
-- `SEED_DNS_HOST=dsv-app-headless.default.svc.cluster.local`
+- `SEED_DNS_HOST=dsv-app-headless.dsv.svc.cluster.local`
 - `SEED_DNS_PORT=4801`
 - `CLUSTER_PORT=4801`
 
-The app service `dsv-app-service` separately provides load-balanced HTTP traffic.
+The app service `dsv-app-service` separately provides load-balanced HTTP traffic on port **9080** (container `SERVER_PORT=9080`, avoiding common **8080** conflicts).
 
 ## Kafka
 
 Kafka runs as a single-broker KRaft StatefulSet in the current manifests. DSV app pods connect through:
 
 ```text
-KAFKA_BOOTSTRAP_SERVERS=kafka.default.svc.cluster.local:9092
+KAFKA_BOOTSTRAP_SERVERS=kafka.dsv.svc.cluster.local:9092
 ```
 
 ## Testing Environment
@@ -71,12 +71,15 @@ kubectl get pods -w
 
 ## Production Environment
 
-`k8s/production` keeps scheduling controls for a multi-node target:
+`k8s/production` targets a multi-node cluster (e.g. 3 control-plane + 10 workers):
 
 - app pods avoid control-plane nodes
-- app pods use pod anti-affinity to spread across worker nodes
-- the app StatefulSet requests up to 12 replicas
+- app pods use pod anti-affinity (one DSV pod per worker)
+- **10 replicas** with `cluster.totalNodes=10`, `thresholdK=6`, `quorumM=6`
+
+Full steps (scp manifests, import image on all workers, verify): [production-kubernetes-deploy.md](production-kubernetes-deploy.md).
 
 ```bash
+kubectl apply -f k8s/production/ --dry-run=client
 kubectl apply -f k8s/production/
 ```
