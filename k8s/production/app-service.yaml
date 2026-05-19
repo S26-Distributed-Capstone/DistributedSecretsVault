@@ -21,6 +21,7 @@ spec:
   # Headless service for DNS lookups of all agent nodes
   type: ClusterIP
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: dsv-app
   ports:
