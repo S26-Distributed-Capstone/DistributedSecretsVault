@@ -13,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import java.util.HashMap;
 import java.util.Map;
 
+import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,7 +26,7 @@ import static org.mockito.Mockito.when;
 public class GetSecretServiceTest {
 
     @Mock
-    private SecretService secretService;
+    private InternalGetService internalGetService;
 
     @InjectMocks
     private GetSecretService getSecretService;
@@ -51,7 +53,7 @@ public class GetSecretServiceTest {
 
     @Test
     void testExecuteNoVersionSuccess() {
-        when(secretService.getSecret(any(SecretKey.class), eq(null))).thenReturn("value1");
+        when(internalGetService.getAcrossCluster(any(SecretKey.class), eq(null))).thenReturn("value1");
         ResponseEntity<String> response = getSecretService.getVersion("user1", "secret1", null);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -60,7 +62,7 @@ public class GetSecretServiceTest {
 
     @Test
     void testGetVersionSuccess() {
-        when(secretService.getSecret(any(SecretKey.class), eq(2L))).thenReturn("value2");
+        when(internalGetService.getAcrossCluster(any(SecretKey.class), eq(2L))).thenReturn("value2");
         ResponseEntity<String> response = getSecretService.getVersion("user1", "secret1", 2L);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -72,7 +74,7 @@ public class GetSecretServiceTest {
         Map<Long, String> expected = new HashMap<>();
         expected.put(1L, "v1");
         expected.put(2L, "v2");
-        when(secretService.getAllVersions(any(SecretKey.class))).thenReturn(expected);
+        when(internalGetService.getAllVersionsAcrossCluster(any(SecretKey.class))).thenReturn(expected);
 
         ResponseEntity<Map<Long, String>> response = getSecretService.getAllVersions("user1", "secret1");
 

@@ -1,16 +1,56 @@
-# Same stack as docker-compose.dsv-redis-kafka.yml but with three DSV app instances.
+# Three DSV app instances with one Redis instance per app node.
 # HTTP: localhost:8081 (app1), :8082 (app2), :8083 (app3)
-name: "Distributed Secrets Vault + Redis + Kafka"
+name: "Distributed Secrets Vault + Per-Node Redis + Kafka"
 
 services:
-  redis:
+  redis1:
     image: redis:8.6-alpine
-    container_name: dsv-redis
+    container_name: dsv-redis-1
     ports:
-      - "6379:6379"
+      - "6381:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
     command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-REDIS_PASSWORD}
     volumes:
-      - redis-data:/var/lib/redis
+      - redis-data-1:/data
+      - ../redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dsv-network
+
+  redis2:
+    image: redis:8.6-alpine
+    container_name: dsv-redis-2
+    ports:
+      - "6382:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-REDIS_PASSWORD}
+    volumes:
+      - redis-data-2:/data
+      - ../redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dsv-network
+
+  redis3:
+    image: redis:8.6-alpine
+    container_name: dsv-redis-3
+    ports:
+      - "6383:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-REDIS_PASSWORD}
+    volumes:
+      - redis-data-3:/data
       - ../redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-REDIS_PASSWORD}\" ping"]
@@ -63,14 +103,19 @@ services:
       - "8081:8080"
     environment:
       - NODE_NAME=node-1
-      - SPRING_DATA_REDIS_HOST=redis
+      - POD_IP=app1
+      - SERVER_PORT=8080
+      - CLUSTER_PORT=4801
+      - SEED_DNS_HOST=app1
+      - SEED_DNS_PORT=4801
+      - SPRING_DATA_REDIS_HOST=redis1
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SEED_DNS_HOST=localhost
+      - JAVA_TOOL_OPTIONS=-Dcluster.totalNodes=3 -Dcluster.thresholdK=2 -Dcluster.quorumM=2
     depends_on:
-      redis:
+      redis1:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -86,14 +131,19 @@ services:
       - "8082:8080"
     environment:
       - NODE_NAME=node-2
-      - SPRING_DATA_REDIS_HOST=redis
+      - POD_IP=app2
+      - SERVER_PORT=8080
+      - CLUSTER_PORT=4801
+      - SEED_DNS_HOST=app1
+      - SEED_DNS_PORT=4801
+      - SPRING_DATA_REDIS_HOST=redis2
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SEED_DNS_HOST=localhost
+      - JAVA_TOOL_OPTIONS=-Dcluster.totalNodes=3 -Dcluster.thresholdK=2 -Dcluster.quorumM=2
     depends_on:
-      redis:
+      redis2:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -109,14 +159,19 @@ services:
       - "8083:8080"
     environment:
       - NODE_NAME=node-3
-      - SPRING_DATA_REDIS_HOST=redis
+      - POD_IP=app3
+      - SERVER_PORT=8080
+      - CLUSTER_PORT=4801
+      - SEED_DNS_HOST=app1
+      - SEED_DNS_PORT=4801
+      - SPRING_DATA_REDIS_HOST=redis3
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:-REDIS_PASSWORD}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SEED_DNS_HOST=localhost
+      - JAVA_TOOL_OPTIONS=-Dcluster.totalNodes=3 -Dcluster.thresholdK=2 -Dcluster.quorumM=2
     depends_on:
-      redis:
+      redis3:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -124,7 +179,9 @@ services:
       - dsv-network
 
 volumes:
-  redis-data:
+  redis-data-1:
+  redis-data-2:
+  redis-data-3:
   kafka-data:
 
 networks:
