@@ -1,12 +1,6 @@
 # Local Cluster Lifecycle Demo
 
-This demo runs a local Docker-based Distributed Secrets Vault cluster and exercises the full secret lifecycle across multiple clients and nodes. It is driven by:
-
-```bash
-./scripts/demo-cluster-lifecycle.sh
-```
-
-The script builds the Spring Boot application, generates a temporary Docker Compose file at `target/dsv-demo/docker-compose.demo.yml`, starts Kafka plus one Redis service per app node, runs the demo checks, and then tears the stack down.
+This demo runs a local Docker-based Distributed Secrets Vault cluster and exercises the full secret lifecycle across multiple clients and nodes. The script builds the Spring Boot application, generates a temporary Docker Compose file at `target/dsv-demo/docker-compose.demo.yml`, starts Kafka plus one Redis service per app node, runs the demo checks, and then tears the stack down.
 
 ## What It Demonstrates
 
@@ -33,7 +27,7 @@ With the defaults, the script uses `NODE_COUNT=3`, `THRESHOLD_K=2`, and `QUORUM_
 
 Install and start:
 
-- Docker with Docker Compose v2, available as `docker compose`
+- Docker with Docker Compose
 - Java and the Maven wrapper requirements used by the project
 - `curl`
 - `jar`, unless running with `SKIP_BUILD=1`
@@ -56,36 +50,7 @@ From the repository root:
 
 The first run may take longer because Docker needs to pull Redis, Kafka, and Java base images.
 
-A successful default run ends with a summary like:
-
-```text
-Demo summary
-  total:  33
-  passed: 33
-  failed: 0
-```
-
-Unless `KEEP_STACK=1` is set, the script automatically stops the demo stack and removes its volumes when it exits.
-
 ## Useful Run Modes
-
-Reuse an existing build output and skip Maven:
-
-```bash
-SKIP_BUILD=1 ./scripts/demo-cluster-lifecycle.sh
-```
-
-Leave the stack running after the checks:
-
-```bash
-KEEP_STACK=1 ./scripts/demo-cluster-lifecycle.sh
-```
-
-Run a larger local cluster, up to 10 app nodes:
-
-```bash
-NODE_COUNT=5 ./scripts/demo-cluster-lifecycle.sh
-```
 
 Customize the quorum and reconstruction threshold:
 
@@ -97,12 +62,6 @@ Move the published ports if the defaults are already in use:
 
 ```bash
 BASE_PORT=9081 REDIS_BASE_PORT=7381 KAFKA_HOST_PORT=29092 ./scripts/demo-cluster-lifecycle.sh
-```
-
-Use a different Compose project name so it does not collide with another local run:
-
-```bash
-PROJECT_NAME=dsv-demo-alt ./scripts/demo-cluster-lifecycle.sh
 ```
 
 ## Configuration Reference
@@ -121,41 +80,8 @@ PROJECT_NAME=dsv-demo-alt ./scripts/demo-cluster-lifecycle.sh
 | `SKIP_BUILD` | `0` | Set to `1` to skip Maven packaging and reuse `target/dependency`. |
 | `PROJECT_NAME` | `dsv-demo` | Docker Compose project and container name prefix. |
 
-## Inspect A Running Demo Stack
-
-When using `KEEP_STACK=1`, useful commands include:
-
-```bash
-docker compose -p dsv-demo -f target/dsv-demo/docker-compose.demo.yml ps
-docker compose -p dsv-demo -f target/dsv-demo/docker-compose.demo.yml logs -f app1
-docker compose -p dsv-demo -f target/dsv-demo/docker-compose.demo.yml logs -f redis1
-docker compose -p dsv-demo -f target/dsv-demo/docker-compose.demo.yml logs -f kafka
-curl -sS http://127.0.0.1:8081/api/v1/cluster/status
-```
-
-Stop and remove the retained stack:
-
-```bash
-docker compose -p dsv-demo -f target/dsv-demo/docker-compose.demo.yml down -v --remove-orphans
-```
-
-If you changed `PROJECT_NAME`, use the same project name in the cleanup command.
-
 ## Troubleshooting
 
 If Docker reports that a port is already allocated, rerun with different `BASE_PORT`, `REDIS_BASE_PORT`, or `KAFKA_HOST_PORT` values.
 
 If the script cannot connect to the Docker daemon, make sure Docker Desktop or the Docker service is running and that your shell has permission to access the Docker socket.
-
-If app nodes become healthy but cluster membership does not reach quorum, inspect the app logs and cluster status:
-
-```bash
-docker compose -p dsv-demo -f target/dsv-demo/docker-compose.demo.yml logs --tail=120 app1 app2 app3
-curl -sS http://127.0.0.1:8081/api/v1/cluster/status
-```
-
-If a previous run was interrupted, clean up before trying again:
-
-```bash
-docker compose -p dsv-demo -f target/dsv-demo/docker-compose.demo.yml down -v --remove-orphans
-```
