@@ -13,7 +13,6 @@ A long-running HTTP service that accepts requests for creating, updating, retrie
 It will:
 
 - Accept structured JSON input
-- Authenticate requests and derive the caller’s identity
 - Accept secret **create** requests that establish a new secret
 - Reject create requests for secrets that already exist
 - Accept secret **update** requests that create a new version of an existing secret
@@ -26,8 +25,6 @@ It will:
   - expand `secret(NAME)` references by retrieving authoritative secret values
   - process `enc(NAME)` references by creating new secrets and returning `secret(NAME)`
 - Fail the entire `.env` request if any referenced secret already exists or cannot be resolved
-- Enforce unauthorized rejections without revealing information on internal state
-- Enforce caller-scoped isolation on reads and writes
 - Expose basic health and status endpoints
 
 The API validates and forwards requests but does not determine secret existence or authoritative state.
@@ -65,7 +62,6 @@ A shared behavioral model implemented consistently across all components.
 
 It defines:
 
-- How callers are identified and scoped
 - What it means for a secret to exist and be retrievable
 - The distinction between secret creation and secret update
 - The shared lock/commit flow used by both creation and update
@@ -74,9 +70,8 @@ It defines:
 - How historical secret values are retained
 - How secret deletion is defined and when a secret is considered non-reconstructable
 - What identifiers are used to reference secrets
-- How isolation is enforced during retrieval and history access
 - How retries and concurrent requests are handled
-- What duplicate and _not found_ errors mean under isolation
+- What duplicate and _not found_ errors mean
 
 The model must be documented and observable in practice.
 
@@ -107,7 +102,7 @@ It will:
 - Clearly distinguish secret creation from secret update
 - Define delete request and response behavior, including threshold-based deletion success criteria
 - Specify duplicate and _not found_ error behavior
-- Describe durability, replication, and isolation guarantees
+- Describe durability and replication guarantees
 - Describe secret-keeping and spreading behavior and failure behavior when referenced secrets cannot be resolved
 - Describe secret history retrieval semantics, including version ordering and validity timestamps
 - Describe `.env` encryption and expansion semantics, including secret creation and all-or-nothing failure
