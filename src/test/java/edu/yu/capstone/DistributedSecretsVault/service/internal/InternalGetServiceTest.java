@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +41,9 @@ public class InternalGetServiceTest {
     @Mock
     private NodeClient nodeClient;
 
+    @Mock
+    private InternalRepairService internalRepairService;
+
     private ClusterConfig clusterConfig;
     private InternalGetService internalGetService;
 
@@ -52,7 +56,7 @@ public class InternalGetServiceTest {
         clusterConfig.setTotalNodes(3);
         clusterConfig.setThresholdK(2);
         internalGetService = new InternalGetService(secretPartRepository, secretReconstructionService,
-                nodeClient, clusterConfig);
+                nodeClient, clusterConfig, internalRepairService);
         lenient().when(nodeClient.resolvePeerUrls()).thenReturn(List.of());
         validKey = new SecretKey("user1", "secret1");
     }
@@ -71,6 +75,39 @@ public class InternalGetServiceTest {
 
         assertEquals("reconstructed", result);
         verify(secretReconstructionService).reconstruct(argThat(parts -> parts.size() == 2));
+    }
+
+    @Test
+    void testGetAcrossClusterRepairsWeakLatestRead() {
+        SecretPart part = new SecretPart(validKey, 2L, 1, new byte[] { 1, 2 });
+        SecretPart peerPart = new SecretPart(validKey, 2L, 2, new byte[] { 3, 4 });
+        when(secretPartRepository.findLatest(validKey)).thenReturn(Optional.of(part));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", validKey, null))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart));
+        when(secretReconstructionService.reconstruct(anyList())).thenReturn("reconstructed");
+        when(internalRepairService.shouldRepairLatestRead(2)).thenReturn(true);
+
+        String result = internalGetService.getAcrossCluster(validKey, null);
+
+        assertEquals("reconstructed", result);
+        verify(internalRepairService).repairLatestVersion(validKey, 2L, "reconstructed");
+    }
+
+    @Test
+    void testGetAcrossClusterDoesNotRepairSpecificVersionRead() {
+        SecretPart part = new SecretPart(validKey, 1L, 1, new byte[] { 1 });
+        SecretPart peerPart = new SecretPart(validKey, 1L, 2, new byte[] { 2 });
+        when(secretPartRepository.findPart(validKey, 1L)).thenReturn(Optional.of(part));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", validKey, 1L))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart));
+        when(secretReconstructionService.reconstruct(anyList())).thenReturn("v1-secret");
+
+        String result = internalGetService.getAcrossCluster(validKey, 1L);
+
+        assertEquals("v1-secret", result);
+        verify(internalRepairService, never()).repairLatestVersion(validKey, 1L, "v1-secret");
     }
 
     @Test

@@ -18,11 +18,13 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.CommitMessage;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.RepairCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InternalOperationConflictException;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.ActionType;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PutCommitHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.RepairCommitHandler;
 
 /**
  * Unit tests for {@link CommitDispatcher}.
@@ -41,11 +43,14 @@ public class CommitDispatcherTest {
     @Mock
     private PutCommitHandler putCommitHandler;
 
+    @Mock
+    private RepairCommitHandler repairCommitHandler;
+
     private CommitDispatcher dispatcher;
 
     @BeforeEach
     void setUp() {
-        dispatcher = new CommitDispatcher(deleteCommitHandler, postCommitHandler, putCommitHandler);
+        dispatcher = new CommitDispatcher(deleteCommitHandler, postCommitHandler, putCommitHandler, repairCommitHandler);
     }
 
     // ── Routing ─────────────────────────────────────────────────────────
@@ -86,6 +91,19 @@ public class CommitDispatcherTest {
         verify(postCommitHandler, never()).handle(any());
     }
 
+    @Test
+    void testDispatchesRepairToRepairHandler() {
+        CommitMessage msg = new CommitMessage(
+                UUID.randomUUID(), new SecretKey("user1", "secret1"), ActionType.REPAIR);
+
+        dispatcher.dispatch(msg);
+
+        verify(repairCommitHandler).handle(any(RepairCommitRequest.class));
+        verify(deleteCommitHandler, never()).handle(any());
+        verify(postCommitHandler, never()).handle(any());
+        verify(putCommitHandler, never()).handle(any());
+    }
+
     // ── Stale / Conflicting Commits ─────────────────────────────────────
 
     @Test
@@ -115,6 +133,16 @@ public class CommitDispatcherTest {
                 UUID.randomUUID(), new SecretKey("user1", "secret1"), ActionType.PUT);
         doThrow(new InternalOperationConflictException("No staged operation found"))
                 .when(putCommitHandler).handle(any(PutCommitRequest.class));
+
+        assertDoesNotThrow(() -> dispatcher.dispatch(msg));
+    }
+
+    @Test
+    void testStaleRepairCommitIsCaughtAndLogged() {
+        CommitMessage msg = new CommitMessage(
+                UUID.randomUUID(), new SecretKey("user1", "secret1"), ActionType.REPAIR);
+        doThrow(new InternalOperationConflictException("No staged operation found"))
+                .when(repairCommitHandler).handle(any(RepairCommitRequest.class));
 
         assertDoesNotThrow(() -> dispatcher.dispatch(msg));
     }

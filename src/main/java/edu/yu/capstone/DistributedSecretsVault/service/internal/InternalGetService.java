@@ -1,6 +1,8 @@
 package edu.yu.capstone.DistributedSecretsVault.service.internal;
 
 import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.config.ClusterConfig;
@@ -21,25 +23,32 @@ import java.util.TreeSet;
 
 @Service
 public class InternalGetService {
+    private static final Logger log = LoggerFactory.getLogger(InternalGetService.class);
+
     private final SecretPartRepository secretPartRepository;
     private final SecretReconstructionService secretReconstructionService;
     private final NodeClient nodeClient;
     private final ClusterConfig clusterConfig;
+    private final InternalRepairService internalRepairService;
 
     public InternalGetService(SecretPartRepository secretPartRepository,
             SecretReconstructionService secretReconstructionService,
             NodeClient nodeClient,
-            ClusterConfig clusterConfig) {
+            ClusterConfig clusterConfig,
+            InternalRepairService internalRepairService) {
         this.secretPartRepository = secretPartRepository;
         this.secretReconstructionService = secretReconstructionService;
         this.nodeClient = nodeClient;
         this.clusterConfig = clusterConfig;
+        this.internalRepairService = internalRepairService;
     }
 
     public String getAcrossCluster(SecretKey key, Long version) {
         validateKey(key);
-        List<SecretPart> selected = collectPartsForReconstruction(key, version);
-        return secretReconstructionService.reconstruct(selected);
+        ReconstructionParts reconstructionParts = collectPartsForReconstruction(key, version);
+        String value = secretReconstructionService.reconstruct(reconstructionParts.selectedParts());
+        maybeRepairLatestRead(key, version, reconstructionParts, value);
+        return value;
     }
 
     public Map<Long, String> getAllVersionsAcrossCluster(SecretKey key) {
@@ -103,7 +112,7 @@ public class InternalGetService {
         }
     }
 
-    private List<SecretPart> collectPartsForReconstruction(SecretKey key, Long requestedVersion) {
+    private ReconstructionParts collectPartsForReconstruction(SecretKey key, Long requestedVersion) {
         Map<Long, Map<Integer, SecretPart>> partsByVersion = new LinkedHashMap<>();
         addLocalPart(partsByVersion, key, requestedVersion);
 
@@ -127,7 +136,7 @@ public class InternalGetService {
         if (selectedParts == null || selectedParts.isEmpty()) {
             throw new SecretNotFoundException();
         }
-        return requireThreshold(selectedParts);
+        return new ReconstructionParts(requireThreshold(selectedParts), resolvedVersion, selectedParts.size());
     }
 
     private Map<Long, Map<Integer, SecretPart>> collectAllPartsByVersion(SecretKey key) {
@@ -183,6 +192,22 @@ public class InternalGetService {
         return nodeClient == null ? List.of() : nodeClient.resolvePeerUrls();
     }
 
+    private void maybeRepairLatestRead(SecretKey key, Long requestedVersion,
+            ReconstructionParts reconstructionParts, String value) {
+        if (requestedVersion != null || internalRepairService == null) {
+            return;
+        }
+        if (!internalRepairService.shouldRepairLatestRead(reconstructionParts.availableParts())) {
+            return;
+        }
+        try {
+            internalRepairService.repairLatestVersion(key, reconstructionParts.version(), value);
+        } catch (RuntimeException e) {
+            log.warn("Read repair skipped after successful reconstruction: key={}, version={}, reason={}",
+                    key, reconstructionParts.version(), e.getMessage());
+        }
+    }
+
     private int resolveTotalParts() {
         if (clusterConfig == null || clusterConfig.getTotalNodes() <= 0) {
             return 1;
@@ -199,5 +224,8 @@ public class InternalGetService {
             threshold = totalParts;
         }
         return threshold;
+    }
+
+    private record ReconstructionParts(List<SecretPart> selectedParts, long version, int availableParts) {
     }
 }

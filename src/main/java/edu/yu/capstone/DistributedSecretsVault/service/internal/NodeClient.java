@@ -19,6 +19,7 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutPrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.RepairPrepareRequest;
 import io.scalecube.services.Microservices;
 
 /**
@@ -120,6 +121,24 @@ public class NodeClient {
             return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
         } catch (Exception ex) {
             log.warn("Failed to send put prepare to {}: {}", peerUrl, ex.getMessage());
+            return PeerResponse.failed(peerUrl, ex.getMessage());
+        }
+    }
+
+    public PeerResponse sendRepairPrepare(String peerUrl, RepairPrepareRequest request) {
+        try {
+            restClient.post()
+                    .uri(peerUrl + "/internal/repair/prepare")
+                    .body(request)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Repair prepare ACK received from {}", peerUrl);
+            return PeerResponse.acknowledged(peerUrl);
+        } catch (RestClientResponseException ex) {
+            log.warn("Repair prepare rejected by {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            return PeerResponse.rejected(peerUrl, ex.getStatusCode().value(), ex.getResponseBodyAsString());
+        } catch (Exception ex) {
+            log.warn("Failed to send repair prepare to {}: {}", peerUrl, ex.getMessage());
             return PeerResponse.failed(peerUrl, ex.getMessage());
         }
     }

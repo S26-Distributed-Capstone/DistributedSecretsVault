@@ -5,10 +5,12 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutPrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.RepairPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PutPrepareHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.RepairPrepareHandler;
 
 import java.util.Map;
 import java.util.UUID;
@@ -32,15 +34,18 @@ public class InternalController {
     private final PostPrepareHandler postPrepareHandler;
     private final PutPrepareHandler putPrepareHandler;
     private final DeletePrepareHandler deletePrepareHandler;
+    private final RepairPrepareHandler repairPrepareHandler;
 
     public InternalController(InternalGetService internalGetService,
             PostPrepareHandler postPrepareHandler,
             PutPrepareHandler putPrepareHandler,
-            DeletePrepareHandler deletePrepareHandler) {
+            DeletePrepareHandler deletePrepareHandler,
+            RepairPrepareHandler repairPrepareHandler) {
         this.internalGetService = internalGetService;
         this.postPrepareHandler = postPrepareHandler;
         this.putPrepareHandler = putPrepareHandler;
         this.deletePrepareHandler = deletePrepareHandler;
+        this.repairPrepareHandler = repairPrepareHandler;
     }
 
     @GetMapping("/{id}")
@@ -65,6 +70,12 @@ public class InternalController {
     @PutMapping("/prepare")
     public ResponseEntity<Void> preparePut(@RequestBody PutPrepareRequest request) {
         putPrepareHandler.handle(request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/repair/prepare")
+    public ResponseEntity<Void> prepareRepair(@RequestBody RepairPrepareRequest request) {
+        repairPrepareHandler.handle(request);
         return ResponseEntity.noContent().build();
     }
 

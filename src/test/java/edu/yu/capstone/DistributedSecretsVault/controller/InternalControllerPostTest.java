@@ -19,6 +19,7 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHan
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PutPrepareHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.RepairPrepareHandler;
 
 @WebMvcTest(InternalController.class)
 @Tag("slice")
@@ -37,6 +38,9 @@ public class InternalControllerPostTest {
 
     @MockitoBean
     private DeletePrepareHandler deletePrepareHandler;
+
+    @MockitoBean
+    private RepairPrepareHandler repairPrepareHandler;
 
     @Test
     void testPreparePostReturnsNoContent() throws Exception {
