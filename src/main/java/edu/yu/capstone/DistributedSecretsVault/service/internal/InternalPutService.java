@@ -63,6 +63,7 @@ public class InternalPutService {
 
         UUID operationId = UUID.randomUUID();
         long version = currentLocalPart.getVersion() + 1L;
+        log.info("Starting distributed put: operationId={}, key={}, version={}", operationId, key, version);
         List<SecretPart> parts = createParts(key, value, version);
         SecretPart localPart = parts.get(0);
         List<SecretPart> peerParts = parts.subList(1, parts.size());
@@ -72,7 +73,11 @@ public class InternalPutService {
         int peerAcks = broadcastPrepare(peerUrls, peerParts, operationId);
         int totalAcks = peerAcks + 1;
         int requiredAcks = computeRequiredAcks();
+        log.info("Put prepare phase complete: operationId={}, totalAcks={}, requiredAcks={}",
+                operationId, totalAcks, requiredAcks);
         if (totalAcks < requiredAcks) {
+            log.warn("Quorum not reached for put: operationId={}, totalAcks={}, requiredAcks={}",
+                    operationId, totalAcks, requiredAcks);
             pendingActionsBuffer.discard(operationId);
             throw new QuorumNotReachedException(
                     "Put failed - received " + totalAcks + " ACKs, required " + requiredAcks);

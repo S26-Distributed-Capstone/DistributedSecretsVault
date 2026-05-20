@@ -63,6 +63,7 @@ public class InternalPostService {
 
         UUID operationId = UUID.randomUUID();
         long version = 1L;
+        log.info("Starting distributed post: operationId={}, key={}, version={}", operationId, key, version);
         List<SecretPart> parts = createParts(key, value, version);
         SecretPart localPart = parts.get(0);
         List<SecretPart> peerParts = parts.subList(1, parts.size());
@@ -72,7 +73,11 @@ public class InternalPostService {
         int peerAcks = broadcastPrepare(peerUrls, peerParts, operationId);
         int totalAcks = peerAcks + 1;
         int requiredAcks = computeRequiredAcks();
+        log.info("Post prepare phase complete: operationId={}, totalAcks={}, requiredAcks={}",
+                operationId, totalAcks, requiredAcks);
         if (totalAcks < requiredAcks) {
+            log.warn("Quorum not reached for post: operationId={}, totalAcks={}, requiredAcks={}",
+                    operationId, totalAcks, requiredAcks);
             pendingActionsBuffer.discard(operationId);
             throw new QuorumNotReachedException(
                     "Post failed - received " + totalAcks + " ACKs, required " + requiredAcks);
