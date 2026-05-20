@@ -24,7 +24,6 @@ Project root:
 ```text
 .env.example                              # Environment variable template
 .env                                      # Local config, gitignored
-scripts/test-three-dsv-kafka-nodes.sh     # Builds and verifies the 3-node Kafka fanout stack
 ```
 
 ## Setup
@@ -63,12 +62,6 @@ docker compose -f docker/dsv/docker-compose.dsv-redis-kafka-3nodes.yml up -d --b
 ```
 
 Apps listen on `8081`, `8082`, and `8083`. Redis instances for those nodes are published on `6381`, `6382`, and `6383`. Each app points at its own Redis service and sets a different `NODE_NAME` so Kafka consumer groups differ and every node receives `secrets-commit` messages.
-
-Automated check:
-
-```bash
-./scripts/test-three-dsv-kafka-nodes.sh
-```
 
 Manual check:
 

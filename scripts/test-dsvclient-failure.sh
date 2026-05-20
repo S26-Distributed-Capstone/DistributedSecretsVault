@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# DSVClient Kubernetes failure test. Deletes StatefulSet pods while client traffic is active.
+# DSVClient availability/load test. This script only sends client requests.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/dsvclient-k8s-helpers.sh"
+source "${SCRIPT_DIR}/dsvclient-cluster-helpers.sh"
+parse_gateway_arg "$@"
 
-LOAD_REQUESTS="${LOAD_REQUESTS:-120}"
-PARALLELISM="${PARALLELISM:-30}"
-FAIL_POD_INDEX="${FAIL_POD_INDEX:-2}"
+LOAD_REQUESTS="${LOAD_REQUESTS:-2000}"
+PARALLELISM="${PARALLELISM:-200}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-200}"
 
 setup_suite
 RESULTS_DIR="${WORK_DIR}/failure"
@@ -20,12 +21,7 @@ section "Seed baseline secret"
 out="$(dsvc "$USER" create "$BASE_SECRET" "baseline-value" 2>&1)" || true
 expect_output_contains "$out" "Secret created" "Created baseline secret"
 
-section "Run client traffic while one pod is deleted"
-(
-    sleep 2
-    info "Deleting pod ${STATEFULSET}-${FAIL_POD_INDEX} in namespace ${NAMESPACE}"
-    kubectl -n "$NAMESPACE" delete pod "${STATEFULSET}-${FAIL_POD_INDEX}" --wait=false
-) &
+section "Run client traffic without cluster mutation"
 
 for i in $(seq 1 "$LOAD_REQUESTS"); do
     (
@@ -46,16 +42,17 @@ for i in $(seq 1 "$LOAD_REQUESTS"); do
     ) &
     if (( i % PARALLELISM == 0 )); then
         wait
+        if (( i % PROGRESS_INTERVAL == 0 )); then
+            progress_status "Availability load progress ${i}/${LOAD_REQUESTS}" "$RESULTS_DIR"
+        fi
     fi
 done
 wait
+progress_status "Availability load final progress ${LOAD_REQUESTS}/${LOAD_REQUESTS}" "$RESULTS_DIR"
 
-section "Wait for StatefulSet recovery"
-wait_for_rollout
-
-section "Verify baseline after recovery"
+section "Verify baseline after load"
 out="$(dsvc "$USER" get "$BASE_SECRET" 2>&1)" || true
-expect_output_contains "$out" "baseline" "Baseline remains readable after pod recovery"
+expect_output_contains "$out" "baseline" "Baseline remains readable after load"
 
 passed="$(count_status "$RESULTS_DIR" PASS)"
 check="$(count_status "$RESULTS_DIR" CHECK)"

@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
-# Shared helpers for DSVClient-driven Kubernetes integration/load tests.
+# Shared helpers for DSVClient-driven cluster integration/load tests.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPOS_ROOT="$(cd "${ROOT}/.." && pwd)"
 
-NAMESPACE="${NAMESPACE:-dsv}"
-STATEFULSET="${STATEFULSET:-dsv-app}"
-SERVICE="${SERVICE:-dsv-app-service}"
-SERVICE_PORT="${SERVICE_PORT:-9080}"
-LOCAL_PORT="${LOCAL_PORT:-19080}"
-BASE_URL="${BASE_URL:-http://127.0.0.1:${LOCAL_PORT}}"
+DEFAULT_GATEWAY_URL="http://192.168.8.11"
+BASE_URL="$DEFAULT_GATEWAY_URL"
 DSV_CLIENT_DIR="${DSV_CLIENT_DIR:-${REPOS_ROOT}/DSVClient}"
 CLIENT_CLI="${CLIENT_CLI:-${DSV_CLIENT_DIR}/cli.py}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -54,35 +50,38 @@ die() {
     exit 1
 }
 
+parse_gateway_arg() {
+    if (($# == 0)); then
+        export BASE_URL
+        return
+    fi
+    if (($# == 1)); then
+        BASE_URL="${1%/}"
+        export BASE_URL
+        return
+    fi
+    if (($# == 2)) && [[ "$1" == "--url" || "$1" == "-u" ]]; then
+        BASE_URL="${2%/}"
+        export BASE_URL
+        return
+    fi
+    die "Usage: $(basename "$0") [gateway-url] or $(basename "$0") --url <gateway-url>"
+}
+
 require_command() {
     command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
 setup_suite() {
     mkdir -p "$WORK_DIR"
-    require_command kubectl
     require_command curl
     require_command "$PYTHON_BIN"
     [[ -f "$CLIENT_CLI" ]] || die "DSVClient CLI not found at ${CLIENT_CLI}. Set DSV_CLIENT_DIR or CLIENT_CLI."
+    grep -F -- "--all" "$CLIENT_CLI" >/dev/null 2>&1 \
+        || die "DSVClient CLI at ${CLIENT_CLI} does not support 'get <name> --all' / '--version'. Update DSVClient or set DSV_CLIENT_DIR to the newer checkout."
 
-    info "Using namespace=${NAMESPACE}, service=${SERVICE}, base_url=${BASE_URL}"
-    kubectl get namespace "$NAMESPACE" >/dev/null
-    kubectl -n "$NAMESPACE" rollout status "statefulset/${STATEFULSET}" --timeout=240s
-    ensure_gateway
+    info "Using gateway ${BASE_URL}"
     wait_for_gateway
-}
-
-ensure_gateway() {
-    if [[ -n "${NO_PORT_FORWARD:-}" || -n "${EXTERNAL_BASE_URL:-}" ]]; then
-        BASE_URL="${EXTERNAL_BASE_URL:-${BASE_URL}}"
-        return
-    fi
-
-    info "Starting kubectl port-forward svc/${SERVICE} ${LOCAL_PORT}:${SERVICE_PORT}"
-    kubectl -n "$NAMESPACE" port-forward "svc/${SERVICE}" "${LOCAL_PORT}:${SERVICE_PORT}" \
-        >"${WORK_DIR}/port-forward.log" 2>&1 &
-    PORT_FORWARD_PID="$!"
-    trap cleanup_suite EXIT
 }
 
 cleanup_suite() {
@@ -99,17 +98,11 @@ wait_for_gateway() {
     local elapsed=0
     while ! curl -sf --connect-timeout 2 --max-time 10 "${BASE_URL}/actuator/health" >/dev/null 2>&1; do
         if (( elapsed >= timeout )); then
-            [[ -f "${WORK_DIR}/port-forward.log" ]] && tail -40 "${WORK_DIR}/port-forward.log" || true
             die "Gateway ${BASE_URL} did not become healthy within ${timeout}s"
         fi
         sleep 3
         elapsed=$((elapsed + 3))
     done
-}
-
-wait_for_rollout() {
-    kubectl -n "$NAMESPACE" rollout status "statefulset/${STATEFULSET}" --timeout="${ROLLOUT_TIMEOUT:-300s}"
-    wait_for_gateway
 }
 
 client_home() {
@@ -130,7 +123,7 @@ dsvc() {
     shift
     local home_dir
     home_dir="$(client_home "$username")"
-    HOME="$home_dir" "$PYTHON_BIN" "$CLIENT_CLI" "$@"
+    HOME="$home_dir" USERPROFILE="$home_dir" "$PYTHON_BIN" "$CLIENT_CLI" "$@"
 }
 
 unique_name() {
@@ -166,6 +159,30 @@ count_status() {
         [[ "$(cat "$file")" == "$status" ]] && count=$((count + 1))
     done
     printf "%s" "$count"
+}
+
+progress_status() {
+    local label="$1"
+    local dir="$2"
+    local pattern="${3:-status-*}"
+    local completed=0
+    local passed=0
+    local failed=0
+    local check=0
+    local file
+    local status
+
+    for file in "$dir"/$pattern; do
+        [[ -f "$file" ]] || continue
+        completed=$((completed + 1))
+        status="$(cat "$file")"
+        case "$status" in
+            PASS) passed=$((passed + 1)) ;;
+            FAIL) failed=$((failed + 1)) ;;
+            CHECK) check=$((check + 1)) ;;
+        esac
+    done
+    info "${label}: completed=${completed}, pass=${passed}, fail=${failed}, check=${check}"
 }
 
 print_summary() {

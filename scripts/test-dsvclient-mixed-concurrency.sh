@@ -3,12 +3,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/dsvclient-k8s-helpers.sh"
+source "${SCRIPT_DIR}/dsvclient-cluster-helpers.sh"
+parse_gateway_arg "$@"
 
-SEED_COUNT="${SEED_COUNT:-50}"
-ROUNDS="${ROUNDS:-8}"
-PARALLELISM="${PARALLELISM:-80}"
-USER_COUNT="${USER_COUNT:-10}"
+SEED_COUNT="${SEED_COUNT:-250}"
+ROUNDS="${ROUNDS:-12}"
+PARALLELISM="${PARALLELISM:-200}"
+USER_COUNT="${USER_COUNT:-25}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-200}"
 
 setup_suite
 section "Seeding mixed-concurrency data"
@@ -21,7 +23,16 @@ for i in $(seq 1 "$SEED_COUNT"); do
     name="mixed-secret-${RUN_ID}-${i}"
     out="$(dsvc "$user" create "$name" "seed-${i}" 2>&1)" || true
     printf "%s\n" "$out" > "${RESULTS_DIR}/seed-${i}.log"
+    if printf "%s" "$out" | grep -Fq "Secret created"; then
+        write_status "${RESULTS_DIR}/status-seed-${i}" "PASS"
+    else
+        write_status "${RESULTS_DIR}/status-seed-${i}" "CHECK"
+    fi
+    if (( i % PROGRESS_INTERVAL == 0 )); then
+        progress_status "Mixed seed progress ${i}/${SEED_COUNT}" "$RESULTS_DIR" "status-seed-*"
+    fi
 done
+progress_status "Mixed seed final progress ${SEED_COUNT}/${SEED_COUNT}" "$RESULTS_DIR" "status-seed-*"
 
 section "Running mixed concurrent load"
 
@@ -50,17 +61,21 @@ for round in $(seq 1 "$ROUNDS"); do
             esac
             printf "%s\n" "$out" > "${RESULTS_DIR}/op-${op_id}.log"
             if printf "%s" "$out" | grep -Eq "Secret created|Secret updated|Delete succeeded|seed-|round-|new-|\\{|\\["; then
-                write_status "${RESULTS_DIR}/status-${op_id}" "PASS"
+                write_status "${RESULTS_DIR}/status-op-${op_id}" "PASS"
             else
-                write_status "${RESULTS_DIR}/status-${op_id}" "CHECK"
+                write_status "${RESULTS_DIR}/status-op-${op_id}" "CHECK"
             fi
         ) &
         if (( op_id % PARALLELISM == 0 )); then
             wait
+            if (( op_id % PROGRESS_INTERVAL == 0 )); then
+                progress_status "Mixed load progress ${op_id}/$((SEED_COUNT * ROUNDS))" "$RESULTS_DIR" "status-op-*"
+            fi
         fi
     done
 done
 wait
+progress_status "Mixed load final progress ${op_id}/${op_id}" "$RESULTS_DIR" "status-op-*"
 
 passed="$(count_status "$RESULTS_DIR" PASS)"
 check="$(count_status "$RESULTS_DIR" CHECK)"

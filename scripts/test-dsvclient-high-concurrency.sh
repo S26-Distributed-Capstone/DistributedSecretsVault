@@ -3,11 +3,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/dsvclient-k8s-helpers.sh"
+source "${SCRIPT_DIR}/dsvclient-cluster-helpers.sh"
+parse_gateway_arg "$@"
 
-REQUESTS="${REQUESTS:-200}"
-PARALLELISM="${PARALLELISM:-40}"
-USER_COUNT="${USER_COUNT:-25}"
+REQUESTS="${REQUESTS:-2000}"
+PARALLELISM="${PARALLELISM:-200}"
+USER_COUNT="${USER_COUNT:-100}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-100}"
 
 setup_suite
 section "High concurrency independent client flows"
@@ -50,9 +52,13 @@ for i in $(seq 1 "$REQUESTS"); do
     run_flow "$i" &
     if (( i % PARALLELISM == 0 )); then
         wait
+        if (( i % PROGRESS_INTERVAL == 0 )); then
+            progress_status "High concurrency progress ${i}/${REQUESTS}" "$RESULTS_DIR"
+        fi
     fi
 done
 wait
+progress_status "High concurrency final progress ${REQUESTS}/${REQUESTS}" "$RESULTS_DIR"
 
 passed="$(count_status "$RESULTS_DIR" PASS)"
 failed="$(count_status "$RESULTS_DIR" FAIL)"

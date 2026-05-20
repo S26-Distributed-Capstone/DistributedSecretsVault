@@ -28,15 +28,9 @@ The application will be available at:
 | `docker/redis/docker-compose.redis.yml` | Redis only |
 | `docker/kafka/docker-compose.kafka.yml` | Kafka only |
 
-## Local Cluster Test
+## Local Three-Node Stack
 
-Use the three-node stack to test cluster-like behavior locally:
-
-```bash
-./scripts/test-three-dsv-kafka-nodes.sh
-```
-
-Or start it manually:
+Start the three-node stack manually:
 
 ```bash
 ./mvnw clean package -DskipTests
