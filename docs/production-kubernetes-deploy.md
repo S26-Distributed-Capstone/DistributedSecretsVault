@@ -17,7 +17,7 @@ All resources run in the **`dsv`** namespace.
 
 Default image: `docker.io/noambensim/distributed-secrets-vault:latest` ([Docker Hub](https://hub.docker.com/r/noambensim/distributed-secrets-vault), via Kustomize).
 
-Cluster parameters (10 nodes, Shamir **k=6**, write quorum **m=6**) are set via `JAVA_TOOL_OPTIONS` in `app-statefulset.yaml`.
+Cluster parameters (10 nodes, Shamir **k=3**, write quorum **m=5**) are set via `JAVA_TOOL_OPTIONS` in `app-statefulset.yaml`.
 
 ## Prerequisites
 

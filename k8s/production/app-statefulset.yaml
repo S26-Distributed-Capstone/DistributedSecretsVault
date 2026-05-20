@@ -71,9 +71,9 @@ spec:
               value: prod
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: kafka.dsv.svc.cluster.local:9092
-            # 10-node cluster: majority k=6, quorum m=6 (see scripts/demo-cluster-lifecycle.sh)
+            # 10-node cluster: k=3, quorum m=5 (see scripts/demo-cluster-lifecycle.sh)
             - name: JAVA_TOOL_OPTIONS
-              value: "-Dcluster.totalNodes=10 -Dcluster.thresholdK=6 -Dcluster.quorumM=6"
+              value: "-Dcluster.totalNodes=10 -Dcluster.thresholdK=3 -Dcluster.quorumM=5"
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness

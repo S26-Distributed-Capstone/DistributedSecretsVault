@@ -55,7 +55,7 @@ Pulls the same Docker Hub image (`imagePullPolicy: IfNotPresent`). For fully off
 
 ## Production environment
 
-Tuned for **10 worker nodes** (Shamir k=6 / quorum m=6). See [docs/production-kubernetes-deploy.md](../docs/production-kubernetes-deploy.md).
+Tuned for **10 worker nodes** (Shamir k=3 / quorum m=5). See [docs/production-kubernetes-deploy.md](../docs/production-kubernetes-deploy.md).
 
 ```bash
 kubectl apply -k k8s/production/ --dry-run=client

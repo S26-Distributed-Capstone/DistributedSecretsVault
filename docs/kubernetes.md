@@ -75,7 +75,7 @@ kubectl get pods -n dsv -w
 
 - app pods avoid control-plane nodes
 - app pods use pod anti-affinity (one DSV pod per worker)
-- **10 replicas** with `cluster.totalNodes=10`, `thresholdK=6`, `quorumM=6`
+- **10 replicas** with `cluster.totalNodes=10`, `thresholdK=3`, `quorumM=5`
 
 Image is pulled from Docker Hub on each node. Build/push: [docker-hub.md](docker-hub.md). Deploy steps: [production-kubernetes-deploy.md](production-kubernetes-deploy.md).
 
