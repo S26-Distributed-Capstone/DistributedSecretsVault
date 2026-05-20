@@ -76,6 +76,9 @@ sequenceDiagram
 - The user may request all versions of a secret, which will return a map of version to secret value
 - Receiving node requests k - 1 shards from nodes, and gets one from itself (minimum threshold to reconstruct)
 - Node reconstructs the plaintext secret in memory using Shamir's algorithm (requires k of n shards)
+- For latest-version reads, the node checks how many shards were actually available. If reconstruction succeeds but the cluster only returned `k` or `k + repairTriggerBuffer` shards, the node performs best-effort read repair before returning the value.
+- Read repair re-splits the reconstructed plaintext in memory and republishes shards for the same version through the internal prepare + Kafka commit flow. It does **not** create a new version.
+- Explicit historical version reads and all-version reads do not trigger repair.
 - **Plaintext exists only in memory during reconstruction, never written to disk**
 - Node returns the secret value to the client and clears it from memory
 
@@ -92,6 +95,12 @@ sequenceDiagram
     Node->>Cluster: Request k-1 additional shards via ScaleCube
     Cluster-->>Node: Return shards (encrypted in transit)
     Node->>Node: Reconstruct plaintext in memory<br/>using Shamir's algorithm (k of n shards)
+    opt Latest read has only k or k+buffer shards
+        Node->>Node: Re-split plaintext into same version shards
+        Node->>Cluster: Prepare repair shards
+        Cluster-->>Node: Repair ACKs
+        Node->>Kafka: Publish repair commit
+    end
     Node-->>Ingress: Return secret value
     Ingress-->>User: Secret value
 ```
@@ -211,3 +220,5 @@ graph LR
 - If failure occurs in the **ordering phase**, no shard writes are committed and the request fails.
 - If failure occurs in the **writing phase**, partially written shards are rolled back.
 - Recovered nodes rejoin automatically via ScaleCube and synchronize state from Kafka and peers.
+- Latest-version reads can also repair degraded shard placement when at least `k` shards remain. This read repair is best-effort: a successful GET still returns the reconstructed value even if repair cannot reach quorum.
+- Repair uses `ActionType.REPAIR`, stages replacement shards in memory, and commits through Kafka like other internal mutations. The committed shard keeps the existing version number.

@@ -19,6 +19,7 @@ It will:
 - Reject update requests for secrets that do not exist
 - Accept secret retrieval requests for previously stored secrets
 - Accept requests to retrieve the version history of a secret
+- Repair latest-version shard placement during retrieval when the system can still reconstruct the value but available shards are close to the recovery threshold
 - Accept secret **delete** requests that remove enough stored shards to make reconstruction impossible
 - Reject delete requests for secrets that do not exist
 - Accept `.env` file content and:
@@ -48,6 +49,7 @@ It will:
 - Shard secret pieces to peer vault instances
 - Serve retrieval, history, and delete requests based on authoritative state
 - Remain available under partial failure (within range of accepted Shamir's recovery threshold)
+- Perform best-effort read repair for latest-version reads when only `k` or `k + repairTriggerBuffer` shards are available
 - Recover state on restart
 
 ---
@@ -71,6 +73,7 @@ It defines:
 - How secret deletion is defined and when a secret is considered non-reconstructable
 - What identifiers are used to reference secrets
 - How retries and concurrent requests are handled
+- How read repair behaves under concurrent updates and deletes
 - What duplicate and _not found_ errors mean
 
 The model must be documented and observable in practice.
@@ -87,6 +90,9 @@ It defines:
 - Shamir's Secret Keeping behavior:
   - A password is separated on a single node into n (configured by user) parts
   - The data is sent out to n - 1 other nodes, with 1 piece staying local to the machine that received the request directly
+- Read repair behavior:
+  - Latest-version GET requests that barely meet the reconstruction threshold may re-split the reconstructed value and restore shards for the same version
+  - Repair does not create a new version and does not apply to historical version reads
 - no master key required, any node can take requests to decode
 - The rule that plaintext secret bytes are never written to durable storage or passed to other nodes
 
@@ -103,6 +109,7 @@ It will:
 - Define delete request and response behavior, including threshold-based deletion success criteria
 - Specify duplicate and _not found_ error behavior
 - Describe durability and replication guarantees
+- Describe best-effort read repair when shard availability is degraded but still reconstructable
 - Describe secret-keeping and spreading behavior and failure behavior when referenced secrets cannot be resolved
 - Describe secret history retrieval semantics, including version ordering and validity timestamps
 - Describe `.env` encryption and expansion semantics, including secret creation and all-or-nothing failure
