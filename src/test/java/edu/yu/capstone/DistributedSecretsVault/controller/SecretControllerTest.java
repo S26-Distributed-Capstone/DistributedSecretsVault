@@ -9,10 +9,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -39,6 +41,9 @@ public class SecretControllerTest {
 
         @MockitoBean
         private DeleteSecretService deleteSecretService;
+
+        @MockitoBean
+        private EnvFileService envFileService;
 
         @Test
         public void testGetSecret() throws Exception {
@@ -85,6 +90,47 @@ public class SecretControllerTest {
                                 .content("{\"userId\":\"user1\",\"secret\":\"mysec\"}"))
                                 .andExpect(status().isOk())
                                 .andExpect(content().string("created-id"));
+        }
+
+        @Test
+        public void testPostEnvFileAsPlainText() throws Exception {
+                String envFile = "Key1=new:val\nKey2=update:other\nKey3=delete:ignored\n";
+                when(envFileService.execute(eq("user1"), eq(envFile)))
+                                .thenReturn(ResponseEntity.ok("processed"));
+
+                mockMvc.perform(post("/api/v1/secrets/env")
+                                .param("user", "user1")
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .content(envFile))
+                                .andExpect(status().isOk())
+                                .andExpect(content().string("processed"));
+        }
+
+        @Test
+        public void testPostEnvFileAsMultipart() throws Exception {
+                String envFile = "Key1=new:val\n";
+                MockMultipartFile file = new MockMultipartFile("file", "secrets.env",
+                                MediaType.TEXT_PLAIN_VALUE, envFile.getBytes(StandardCharsets.UTF_8));
+                when(envFileService.execute(eq("user1"), eq(envFile)))
+                                .thenReturn(ResponseEntity.ok("processed"));
+
+                mockMvc.perform(multipart("/api/v1/secrets/env")
+                                .file(file)
+                                .param("user", "user1"))
+                                .andExpect(status().isOk())
+                                .andExpect(content().string("processed"));
+        }
+
+        @Test
+        public void testPostEnvFileAsJson() throws Exception {
+                when(envFileService.execute(eq("user1"), eq("Key1=new:val")))
+                                .thenReturn(ResponseEntity.ok("processed"));
+
+                mockMvc.perform(post("/api/v1/secrets/env")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"user\":\"user1\",\"content\":\"Key1=new:val\"}"))
+                                .andExpect(status().isOk())
+                                .andExpect(content().string("processed"));
         }
 
         @Test

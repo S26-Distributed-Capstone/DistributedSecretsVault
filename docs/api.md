@@ -110,3 +110,33 @@ Broadcasts a delete command to permanently remove all shards of a secret from th
 **Responses:**
 - `204 No Content`: The secret shards were successfully deleted from at least `m-k+1` nodes.
 - `404 Not Found`: The secret does not exist.
+
+---
+
+### 6. Process a `.env` File
+Processes a client-supplied `.env` file containing create, update, and delete operations.
+
+**POST** `/api/v1/secrets/env`
+
+Each non-empty line must use:
+
+```env
+Key1=new:val
+Key2=update:val
+Key3=delete:val
+```
+
+The action must be `new`, `update`, or `delete`. Keys must be unique within the file; duplicate keys fail the request before any write is attempted.
+
+Supported request formats:
+
+- `text/plain` body with `user` as a query parameter.
+- `multipart/form-data` with `user` and a `file` part.
+- `application/json` with `user` and `envFileContent` fields. The content field also accepts aliases `content`, `env`, or `envFile`.
+
+**Responses:**
+- `200 OK`: The file was processed. Returns operation counts.
+- `400 Bad Request`: The file is malformed, has duplicate keys, or is missing a user.
+- `404 Not Found`: An `update` or `delete` key does not exist.
+- `409 Conflict`: A `new` key already exists.
+- `503 Service Unavailable`: Failed to reach quorum during one of the write phases.
