@@ -37,11 +37,29 @@ jobs:
 
       - name: Resolve image tag
         id: meta
+        env:
+          DOCKER_REPO: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DSV_IMAGE_NAME }}
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+            TAG="${{ inputs.image_tag }}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            if [[ "$TAG" == "latest" ]]; then
+              echo "tags=$DOCKER_REPO:latest" >> "$GITHUB_OUTPUT"
+            else
+              echo "tags=$DOCKER_REPO:$TAG" >> "$GITHUB_OUTPUT"
+            fi
           else
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            VERSION=${GITHUB_REF_NAME#v}
+            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+            
+            # Find the highest semantic version tag without needing a full clone
+            HIGHEST_TAG=$(git ls-remote --tags origin "refs/tags/v*" | awk '{print $2}' | sed 's|refs/tags/||; s|\^{}||' | sort -V | tail -n 1)
+            
+            if [[ "${GITHUB_REF_NAME}" == "${HIGHEST_TAG}" ]]; then
+              echo "tags=$DOCKER_REPO:$VERSION,$DOCKER_REPO:latest" >> "$GITHUB_OUTPUT"
+            else
+              echo "tags=$DOCKER_REPO:$VERSION" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Log in to Docker Hub
@@ -55,4 +73,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DSV_IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
