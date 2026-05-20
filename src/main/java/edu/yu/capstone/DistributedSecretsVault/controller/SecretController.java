@@ -4,13 +4,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.DeleteSecretRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.secret.EnvFileRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PostSecretRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PutSecretRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.DeleteSecretService;
+import edu.yu.capstone.DistributedSecretsVault.service.secret.EnvFileService;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.GetSecretService;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.PostSecretService;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.PutSecretService;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,7 +22,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RestController
@@ -30,13 +36,16 @@ public class SecretController {
     private final PostSecretService postSecretService;
     private final PutSecretService putSecretService;
     private final DeleteSecretService deleteSecretService;
+    private final EnvFileService envFileService;
 
     public SecretController(GetSecretService getSecretService, PostSecretService postSecretService,
-            PutSecretService putSecretService, DeleteSecretService deleteSecretService) {
+            PutSecretService putSecretService, DeleteSecretService deleteSecretService,
+            EnvFileService envFileService) {
         this.getSecretService = getSecretService;
         this.postSecretService = postSecretService;
         this.putSecretService = putSecretService;
         this.deleteSecretService = deleteSecretService;
+        this.envFileService = envFileService;
     }
 
     @GetMapping("/{id}")
@@ -53,6 +62,29 @@ public class SecretController {
     @PostMapping
     public ResponseEntity<String> postSecret(@RequestBody PostSecretRequest request) {
         return postSecretService.execute(request);
+    }
+
+    @PostMapping(value = "/env", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> postEnvFile(@RequestParam("user") String user, @RequestBody String envFileContent) {
+        return envFileService.execute(user, envFileContent);
+    }
+
+    @PostMapping(value = "/env", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<String> postEnvFile(@RequestParam("user") String user,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            return envFileService.execute(user, new String(file.getBytes(), StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Unable to read .env file", e);
+        }
+    }
+
+    @PostMapping(value = "/env", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> postEnvFile(@RequestBody EnvFileRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request is required");
+        }
+        return envFileService.execute(request.getUser(), request.getEnvFileContent());
     }
 
     @PutMapping
