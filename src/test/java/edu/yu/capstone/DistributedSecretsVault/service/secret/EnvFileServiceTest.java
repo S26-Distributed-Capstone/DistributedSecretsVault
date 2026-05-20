@@ -37,6 +37,9 @@ public class EnvFileServiceTest {
     private DeleteSecretService deleteSecretService;
 
     @Mock
+    private GetSecretService getSecretService;
+
+    @Mock
     private SecretPartRepository secretPartRepository;
 
     @InjectMocks
@@ -47,15 +50,17 @@ public class EnvFileServiceTest {
         when(secretPartRepository.exists(new SecretKey("user1", "Key1"))).thenReturn(false);
         when(secretPartRepository.exists(new SecretKey("user1", "Key2"))).thenReturn(true);
         when(secretPartRepository.exists(new SecretKey("user1", "Key3"))).thenReturn(true);
+        when(getSecretService.getVersion("user1", "Key4", null)).thenReturn(ResponseEntity.ok("fetched"));
 
         ResponseEntity<String> response = envFileService.execute("user1", """
                 Key1=new:val
                 Key2=update:next:with:colons
+                Key4=get
                 Key3=delete
                 """);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("Processed .env file: 1 created, 1 updated, 1 deleted", response.getBody());
+        assertEquals("Key1=val\nKey2=next:with:colons\nKey4=fetched", response.getBody());
 
         ArgumentCaptor<PostSecretRequest> postCaptor = ArgumentCaptor.forClass(PostSecretRequest.class);
         verify(postSecretService).execute(postCaptor.capture());
@@ -73,6 +78,29 @@ public class EnvFileServiceTest {
         verify(deleteSecretService).execute(deleteCaptor.capture());
         assertEquals("Key3", deleteCaptor.getValue().getDeleteName());
         assertEquals("user1", deleteCaptor.getValue().getUser());
+
+        verify(getSecretService).getVersion("user1", "Key4", null);
+    }
+
+    @Test
+    void testExecuteSupportsSpecificVersionGet() {
+        when(getSecretService.getVersion("user1", "Key1", 2L)).thenReturn(ResponseEntity.ok("version-two"));
+
+        ResponseEntity<String> response = envFileService.execute("user1", "Key1=get:2");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("Key1=version-two", response.getBody());
+        verify(getSecretService).getVersion("user1", "Key1", 2L);
+    }
+
+    @Test
+    void testExecuteReturnsEmptyBodyForDeleteOnlyFile() {
+        when(secretPartRepository.exists(new SecretKey("user1", "Key1"))).thenReturn(true);
+
+        ResponseEntity<String> response = envFileService.execute("user1", "Key1=delete");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("", response.getBody());
     }
 
     @Test
@@ -84,7 +112,8 @@ public class EnvFileServiceTest {
                         """));
 
         assertEquals("Duplicate key in .env file: Key1", exception.getMessage());
-        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService);
+        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService,
+                getSecretService);
     }
 
     @Test
@@ -92,8 +121,9 @@ public class EnvFileServiceTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> envFileService.execute("user1", "Key1=replace:val"));
 
-        assertEquals("Invalid .env action on line 1: expected new, update, or delete", exception.getMessage());
-        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService);
+        assertEquals("Invalid .env action on line 1: expected new, update, get, or delete", exception.getMessage());
+        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService,
+                getSecretService);
     }
 
     @Test
@@ -101,9 +131,21 @@ public class EnvFileServiceTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> envFileService.execute("user1", "Key1=new"));
 
-        assertEquals("Invalid .env entry on line 1: expected KEY=new:value, KEY=update:value, or KEY=delete",
+        assertEquals("Invalid .env entry on line 1: expected KEY=new:value, KEY=update:value, KEY=get, KEY=get:version, or KEY=delete",
                 exception.getMessage());
-        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService);
+        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService,
+                getSecretService);
+    }
+
+    @Test
+    void testExecuteRejectsGetAll() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> envFileService.execute("user1", "Key1=get:all"));
+
+        assertEquals("Invalid .env entry on line 1: expected KEY=new:value, KEY=update:value, KEY=get, KEY=get:version, or KEY=delete",
+                exception.getMessage());
+        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService,
+                getSecretService);
     }
 
     @Test
@@ -114,7 +156,7 @@ public class EnvFileServiceTest {
                 () -> envFileService.execute("user1", "Key1=new:val"));
 
         assertEquals("Secret already exists: Key1", exception.getMessage());
-        verifyNoInteractions(postSecretService, putSecretService, deleteSecretService);
+        verifyNoInteractions(postSecretService, putSecretService, deleteSecretService, getSecretService);
     }
 
     @Test
@@ -125,12 +167,26 @@ public class EnvFileServiceTest {
                 () -> envFileService.execute("user1", "Key1=update:val"));
 
         assertEquals("Secret not found: Key1", exception.getMessage());
+        verifyNoInteractions(postSecretService, putSecretService, deleteSecretService, getSecretService);
+    }
+
+    @Test
+    void testExecuteRejectsMissingSecretForGetOperation() {
+        when(getSecretService.getVersion("user1", "Key1", null))
+                .thenThrow(new SecretNotFoundException("Secret not found: Key1"));
+
+        SecretNotFoundException exception = assertThrows(SecretNotFoundException.class,
+                () -> envFileService.execute("user1", "Key1=get"));
+
+        assertEquals("Secret not found: Key1", exception.getMessage());
+        verify(getSecretService).getVersion("user1", "Key1", null);
         verifyNoInteractions(postSecretService, putSecretService, deleteSecretService);
     }
 
     @Test
     void testExecuteRequiresUser() {
         assertThrows(IllegalArgumentException.class, () -> envFileService.execute(" ", "Key1=new:val"));
-        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService);
+        verifyNoInteractions(secretPartRepository, postSecretService, putSecretService, deleteSecretService,
+                getSecretService);
     }
 }
