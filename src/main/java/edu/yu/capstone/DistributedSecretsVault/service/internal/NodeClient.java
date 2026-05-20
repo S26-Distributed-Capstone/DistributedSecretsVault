@@ -19,10 +19,11 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretPart;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeletePrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostPrepareRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutPrepareRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.recovery.NodeStateResponse;
 import io.scalecube.services.Microservices;
 
 /**
- * Outbound HTTP client for inter-node communication within the cluster.
+ * Outbound HTTP client for internode communication within the cluster.
  * <p>
  * Peer discovery is handled via ScaleCube's
  * {@link Microservices#serviceEndpoints()},
@@ -159,7 +160,7 @@ public class NodeClient {
             Map<Long, SecretPart> parts = restClient.get()
                     .uri(peerUrl + "/internal/{id}/all?user={user}", key.getName(), key.getOwnerId())
                     .retrieve()
-                    .body(new ParameterizedTypeReference<Map<Long, SecretPart>>() {
+                    .body(new ParameterizedTypeReference<>() {
                     });
             log.debug("Secret version parts received from {}", peerUrl);
             return SecretPartsResponse.found(peerUrl, parts == null ? Map.of() : parts);
@@ -199,7 +200,7 @@ public class NodeClient {
         Set<String> peerUrls = new LinkedHashSet<>();
 
         ms.serviceEndpoints().forEach(endpoint -> {
-            // endpoint.address() returns "host:port" (ScaleCube RSocket port)
+            // endpoint.address() returns "host:port" (ScaleCube Rsocket port)
             // We extract just the host and combine with the HTTP port
             String address = endpoint.address().toString();
             String host = extractHost(address);
@@ -286,4 +287,63 @@ public class NodeClient {
             return new SecretPartsResponse(peerUrl, null, null, errorMessage);
         }
     }
+
+    /**
+     * Retrieve complete state from a peer node for recovery.
+     * Returns all (user:key:version) entries the peer knows about.
+     *
+     * @param peerUrl base URL of the peer
+     * @return NodeStateResponse with list of all secrets on that peer
+     */
+    public NodeStateResponse getNodeState(String peerUrl) {
+        try {
+            NodeStateResponse response = restClient.get()
+                    .uri(peerUrl + "/internal/recovery/state")
+                    .retrieve()
+                    .body(NodeStateResponse.class);
+
+            log.debug("Retrieved state from peer {}: {} entries", peerUrl,
+                    response != null && response.getNodeState() != null ? response.getNodeState().size() : 0);
+            return response != null ? response : new NodeStateResponse();
+        } catch (RestClientResponseException ex) {
+            log.warn("Failed to get state from {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            return new NodeStateResponse();
+        } catch (Exception ex) {
+            log.warn("Failed to get state from {}: {}", peerUrl, ex.getMessage());
+            return new NodeStateResponse();
+        }
+    }
+
+    /**
+     * Request a specific shard from a peer for recovery.
+     *
+     * @param peerUrl base URL of the peer
+     * @param user user/owner ID
+     * @param key secret key name
+     * @param version secret version
+     * @return SecretPart if found, null otherwise
+     */
+    public SecretPart requestShard(String peerUrl, String user, String key, long version) {
+        try {
+            String uri = peerUrl + "/internal/recovery/shard/{user}/{key}/{version}";
+            SecretPart part = restClient.get()
+                    .uri(uri, user, key, version)
+                    .retrieve()
+                    .body(SecretPart.class);
+
+            log.debug("Retrieved shard {}:{}:{} from peer {}", user, key, version, peerUrl);
+            return part;
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().is4xxClientError()) {
+                log.debug("Shard not found on {} ({}:{}:{})", peerUrl, user, key, version);
+            } else {
+                log.warn("Failed to retrieve shard from {} with HTTP {}", peerUrl, ex.getStatusCode().value());
+            }
+            return null;
+        } catch (Exception ex) {
+            log.warn("Failed to retrieve shard from {}: {}", peerUrl, ex.getMessage());
+            return null;
+        }
+    }
+
 }

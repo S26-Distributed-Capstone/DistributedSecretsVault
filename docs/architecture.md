@@ -210,4 +210,6 @@ graph LR
 
 - If failure occurs in the **ordering phase**, no shard writes are committed and the request fails.
 - If failure occurs in the **writing phase**, partially written shards are rolled back.
-- Recovered nodes rejoin automatically via ScaleCube and synchronize state from Kafka and peers.
+- Recovered nodes rejoin automatically via ScaleCube, query peers for current shard state, and pull any missing shards locally.
+- On the first cluster startup, there are no peers yet, so recovery exits cleanly as a no-op.
+- After catch-up, the node can be queried for shards and can participate in Shamir reconstruction immediately.

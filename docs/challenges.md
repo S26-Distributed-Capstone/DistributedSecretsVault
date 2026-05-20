@@ -36,4 +36,4 @@
     Phase separation makes recovery behavior explicit and prevents ambiguous outcomes for in-flight writes.
 
 12. **Recovery and Availability**  
-    Nodes recover from durable storage, and rejoin automatically when healthy. Quorum rules determine whether reads/writes continue or fail fast during degraded periods.
+    Nodes recover from their peers by synchronizing the current shard inventory and fetching missing shards locally. On the first cluster startup, recovery no-ops because there are no peers yet. Quorum rules determine whether reads/writes continue or fail fast during degraded periods.

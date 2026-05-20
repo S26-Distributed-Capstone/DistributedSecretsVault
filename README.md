@@ -12,6 +12,7 @@ The Distributed Secrets Vault is a leaderless cluster system where secrets are s
 - [Distributed System Challenges](docs/challenges.md)
 - [Workflow Diagrams](docs/crud)
 - [Software Architecture Diagrams](docs/architecture.md)
+- [Peer-Only Recovery](docs/peer-recovery.md)
 - [Tools & Technologies](docs/technologies.md)
 
 ## Installation and Usage Guide
