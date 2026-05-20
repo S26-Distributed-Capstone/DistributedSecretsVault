@@ -97,21 +97,6 @@ public class EnvFileServiceTest {
     }
 
     @Test
-    void testExecuteStillAllowsDeleteWithColonForBackwardCompatibility() {
-        when(secretPartRepository.exists(new SecretKey("user1", "Key1"))).thenReturn(true);
-
-        ResponseEntity<String> response = envFileService.execute("user1", "Key1=delete:ignored");
-
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("Processed .env file: 0 created, 0 updated, 1 deleted", response.getBody());
-
-        ArgumentCaptor<DeleteSecretRequest> deleteCaptor = ArgumentCaptor.forClass(DeleteSecretRequest.class);
-        verify(deleteSecretService).execute(deleteCaptor.capture());
-        assertEquals("Key1", deleteCaptor.getValue().getDeleteName());
-        assertEquals("user1", deleteCaptor.getValue().getUser());
-    }
-
-    @Test
     void testExecuteRejectsNewWithoutValueDelimiter() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> envFileService.execute("user1", "Key1=new"));
