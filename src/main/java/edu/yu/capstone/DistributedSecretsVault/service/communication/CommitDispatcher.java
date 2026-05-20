@@ -8,11 +8,13 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.CommitMessage;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.DeleteCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PostCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.dto.internal.PutCommitRequest;
+import edu.yu.capstone.DistributedSecretsVault.dto.internal.RepairCommitRequest;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.InternalOperationConflictException;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.ActionType;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.DeleteCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PutCommitHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.RepairCommitHandler;
 
 @Service
 public class CommitDispatcher {
@@ -21,13 +23,16 @@ public class CommitDispatcher {
     private final DeleteCommitHandler deleteCommitHandler;
     private final PostCommitHandler postCommitHandler;
     private final PutCommitHandler putCommitHandler;
+    private final RepairCommitHandler repairCommitHandler;
 
     public CommitDispatcher(DeleteCommitHandler deleteCommitHandler,
             PostCommitHandler postCommitHandler,
-            PutCommitHandler putCommitHandler) {
+            PutCommitHandler putCommitHandler,
+            RepairCommitHandler repairCommitHandler) {
         this.deleteCommitHandler = deleteCommitHandler;
         this.postCommitHandler = postCommitHandler;
         this.putCommitHandler = putCommitHandler;
+        this.repairCommitHandler = repairCommitHandler;
     }
 
     public void dispatch(CommitMessage message) {
@@ -39,6 +44,8 @@ public class CommitDispatcher {
                 postCommitHandler.handle(new PostCommitRequest(message.getOperationId(), message.getSecretKey()));
             } else if (message.getActionType() == ActionType.PUT) {
                 putCommitHandler.handle(new PutCommitRequest(message.getOperationId(), message.getSecretKey()));
+            } else if (message.getActionType() == ActionType.REPAIR) {
+                repairCommitHandler.handle(new RepairCommitRequest(message.getOperationId(), message.getSecretKey()));
             } else {
                 log.warn("Ignoring unsupported commit action type: operationId={}, actionType={}",
                         message.getOperationId(), message.getActionType());

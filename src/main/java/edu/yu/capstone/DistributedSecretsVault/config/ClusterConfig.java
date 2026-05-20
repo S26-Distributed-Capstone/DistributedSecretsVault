@@ -14,4 +14,6 @@ public class ClusterConfig {
     private int quorumM;
     private long lockTimeoutMillis;
     private long writeTimeoutMillis;
+    private boolean repairEnabled = true;
+    private int repairTriggerBuffer = 1;
 }

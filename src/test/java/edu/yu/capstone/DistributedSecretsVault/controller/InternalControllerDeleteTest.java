@@ -5,6 +5,7 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.DeletePrepareHan
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalGetService;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PostPrepareHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PutPrepareHandler;
+import edu.yu.capstone.DistributedSecretsVault.service.internal.RepairPrepareHandler;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,9 @@ public class InternalControllerDeleteTest {
 
     @MockitoBean
     private DeletePrepareHandler deletePrepareHandler;
+
+    @MockitoBean
+    private RepairPrepareHandler repairPrepareHandler;
 
     @Test
     void testPrepareDeleteReturnsNoContent() throws Exception {

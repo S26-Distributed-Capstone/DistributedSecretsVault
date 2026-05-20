@@ -1,6 +1,8 @@
 package edu.yu.capstone.DistributedSecretsVault.service.internal;
 
 import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import edu.yu.capstone.DistributedSecretsVault.config.ClusterConfig;
@@ -13,6 +15,7 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.Secre
 import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartsResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretReconstructionService;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,25 +24,32 @@ import java.util.TreeSet;
 
 @Service
 public class InternalGetService {
+    private static final Logger log = LoggerFactory.getLogger(InternalGetService.class);
+
     private final SecretPartRepository secretPartRepository;
     private final SecretReconstructionService secretReconstructionService;
     private final NodeClient nodeClient;
     private final ClusterConfig clusterConfig;
+    private final InternalRepairService internalRepairService;
 
     public InternalGetService(SecretPartRepository secretPartRepository,
             SecretReconstructionService secretReconstructionService,
             NodeClient nodeClient,
-            ClusterConfig clusterConfig) {
+            ClusterConfig clusterConfig,
+            InternalRepairService internalRepairService) {
         this.secretPartRepository = secretPartRepository;
         this.secretReconstructionService = secretReconstructionService;
         this.nodeClient = nodeClient;
         this.clusterConfig = clusterConfig;
+        this.internalRepairService = internalRepairService;
     }
 
     public String getAcrossCluster(SecretKey key, Long version) {
         validateKey(key);
-        List<SecretPart> selected = collectPartsForReconstruction(key, version);
-        return secretReconstructionService.reconstruct(selected);
+        ReconstructionParts reconstructionParts = collectPartsForReconstruction(key, version);
+        String value = secretReconstructionService.reconstruct(reconstructionParts.selectedParts());
+        maybeRepairLatestRead(key, version, reconstructionParts, value);
+        return value;
     }
 
     public Map<Long, String> getAllVersionsAcrossCluster(SecretKey key) {
@@ -103,14 +113,19 @@ public class InternalGetService {
         }
     }
 
-    private List<SecretPart> collectPartsForReconstruction(SecretKey key, Long requestedVersion) {
+    private ReconstructionParts collectPartsForReconstruction(SecretKey key, Long requestedVersion) {
         Map<Long, Map<Integer, SecretPart>> partsByVersion = new LinkedHashMap<>();
-        addLocalPart(partsByVersion, key, requestedVersion);
+        Optional<SecretPart> localPart = addLocalPart(partsByVersion, key, requestedVersion);
+        List<SecretPart> foundPeerParts = new ArrayList<>();
+        int liveMissingPeerParts = 0;
 
         for (String peerUrl : resolvePeerUrls()) {
             SecretPartResponse response = nodeClient.fetchSecretPart(peerUrl, key, requestedVersion);
             if (response != null && response.found()) {
                 addPart(partsByVersion, response.part());
+                foundPeerParts.add(response.part());
+            } else if (isMissingPartResponse(response)) {
+                liveMissingPeerParts++;
             }
         }
 
@@ -127,7 +142,11 @@ public class InternalGetService {
         if (selectedParts == null || selectedParts.isEmpty()) {
             throw new SecretNotFoundException();
         }
-        return requireThreshold(selectedParts);
+        int liveRepairTargets = liveMissingPeerParts
+                + countFoundPartsMissingVersion(foundPeerParts, resolvedVersion)
+                + (hasPartForVersion(localPart, resolvedVersion) ? 0 : 1);
+        return new ReconstructionParts(
+                requireThreshold(selectedParts), resolvedVersion, selectedParts.size(), liveRepairTargets);
     }
 
     private Map<Long, Map<Integer, SecretPart>> collectAllPartsByVersion(SecretKey key) {
@@ -143,11 +162,13 @@ public class InternalGetService {
         return partsByVersion;
     }
 
-    private void addLocalPart(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key, Long requestedVersion) {
+    private Optional<SecretPart> addLocalPart(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key,
+            Long requestedVersion) {
         Optional<SecretPart> localPart = requestedVersion == null
                 ? secretPartRepository.findLatest(key)
                 : secretPartRepository.findPart(key, requestedVersion);
         localPart.ifPresent(part -> addPart(partsByVersion, part));
+        return localPart;
     }
 
     private void addLocalVersionParts(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key) {
@@ -183,6 +204,23 @@ public class InternalGetService {
         return nodeClient == null ? List.of() : nodeClient.resolvePeerUrls();
     }
 
+    private void maybeRepairLatestRead(SecretKey key, Long requestedVersion,
+            ReconstructionParts reconstructionParts, String value) {
+        if (requestedVersion != null || internalRepairService == null) {
+            return;
+        }
+        if (!internalRepairService.shouldRepairLatestRead(
+                reconstructionParts.availableParts(), reconstructionParts.liveRepairTargets())) {
+            return;
+        }
+        try {
+            internalRepairService.repairLatestVersion(key, reconstructionParts.version(), value);
+        } catch (RuntimeException e) {
+            log.warn("Read repair skipped after successful reconstruction: key={}, version={}, reason={}",
+                    key, reconstructionParts.version(), e.getMessage());
+        }
+    }
+
     private int resolveTotalParts() {
         if (clusterConfig == null || clusterConfig.getTotalNodes() <= 0) {
             return 1;
@@ -199,5 +237,29 @@ public class InternalGetService {
             threshold = totalParts;
         }
         return threshold;
+    }
+
+    private boolean isMissingPartResponse(SecretPartResponse response) {
+        return response != null && response.statusCode() != null && response.statusCode() == 404;
+    }
+
+    private int countFoundPartsMissingVersion(List<SecretPart> foundParts, long resolvedVersion) {
+        int missing = 0;
+        for (SecretPart part : foundParts) {
+            if (!hasPartForVersion(Optional.ofNullable(part), resolvedVersion)) {
+                missing++;
+            }
+        }
+        return missing;
+    }
+
+    private boolean hasPartForVersion(Optional<SecretPart> part, long version) {
+        return part.isPresent()
+                && part.get().getVersion() != null
+                && part.get().getVersion() == version;
+    }
+
+    private record ReconstructionParts(List<SecretPart> selectedParts, long version, int availableParts,
+            int liveRepairTargets) {
     }
 }
