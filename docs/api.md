@@ -123,10 +123,11 @@ Each non-empty line must use:
 ```env
 Key1=new:val
 Key2=update:val
-Key3=delete:val
+Key3=delete
 ```
 
-The action must be `new`, `update`, or `delete`. Keys must be unique within the file; duplicate keys fail the request before any write is attempted.
+The action must be `new`, `update`, or `delete`. `new` and `update` require a value after `:`;
+`delete` only needs the key name and action. Keys must be unique within the file; duplicate keys fail the request before any write is attempted.
 
 Supported request formats:
 

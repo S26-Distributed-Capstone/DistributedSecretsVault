@@ -116,11 +116,13 @@ public class EnvFileService {
 
         String actionAndValue = line.substring(equalsIndex + 1);
         int colonIndex = actionAndValue.indexOf(':');
-        if (colonIndex < 0) {
+        if (colonIndex < 0 && actionAndValue.isBlank()) {
             throw invalidLine(lineNumber);
         }
 
-        String actionText = actionAndValue.substring(0, colonIndex).trim().toLowerCase(Locale.ROOT);
+        String actionText = colonIndex < 0
+                ? actionAndValue.trim().toLowerCase(Locale.ROOT)
+                : actionAndValue.substring(0, colonIndex).trim().toLowerCase(Locale.ROOT);
         EnvAction action = switch (actionText) {
             case "new" -> EnvAction.NEW;
             case "update" -> EnvAction.UPDATE;
@@ -129,13 +131,17 @@ public class EnvFileService {
                     + ": expected new, update, or delete");
         };
 
-        String value = actionAndValue.substring(colonIndex + 1);
+        if (colonIndex < 0 && action != EnvAction.DELETE) {
+            throw invalidLine(lineNumber);
+        }
+
+        String value = colonIndex < 0 ? "" : actionAndValue.substring(colonIndex + 1);
         return new EnvSecretOperation(key, action, value);
     }
 
     private IllegalArgumentException invalidLine(int lineNumber) {
         return new IllegalArgumentException("Invalid .env entry on line " + lineNumber
-                + ": expected KEY=action:value");
+                + ": expected KEY=new:value, KEY=update:value, or KEY=delete");
     }
 
     private void validateOperationPreconditions(String user, List<EnvSecretOperation> operations) {

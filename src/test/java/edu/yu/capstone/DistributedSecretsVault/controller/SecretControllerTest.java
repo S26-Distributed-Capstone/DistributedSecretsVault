@@ -94,7 +94,7 @@ public class SecretControllerTest {
 
         @Test
         public void testPostEnvFileAsPlainText() throws Exception {
-                String envFile = "Key1=new:val\nKey2=update:other\nKey3=delete:ignored\n";
+                String envFile = "Key1=new:val\nKey2=update:other\nKey3=delete\n";
                 when(envFileService.execute(eq("user1"), eq(envFile)))
                                 .thenReturn(ResponseEntity.ok("processed"));
 
