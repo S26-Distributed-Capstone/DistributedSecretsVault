@@ -15,6 +15,7 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.Secre
 import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.SecretPartsResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretReconstructionService;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,12 +115,17 @@ public class InternalGetService {
 
     private ReconstructionParts collectPartsForReconstruction(SecretKey key, Long requestedVersion) {
         Map<Long, Map<Integer, SecretPart>> partsByVersion = new LinkedHashMap<>();
-        addLocalPart(partsByVersion, key, requestedVersion);
+        Optional<SecretPart> localPart = addLocalPart(partsByVersion, key, requestedVersion);
+        List<SecretPart> foundPeerParts = new ArrayList<>();
+        int liveMissingPeerParts = 0;
 
         for (String peerUrl : resolvePeerUrls()) {
             SecretPartResponse response = nodeClient.fetchSecretPart(peerUrl, key, requestedVersion);
             if (response != null && response.found()) {
                 addPart(partsByVersion, response.part());
+                foundPeerParts.add(response.part());
+            } else if (isMissingPartResponse(response)) {
+                liveMissingPeerParts++;
             }
         }
 
@@ -136,7 +142,11 @@ public class InternalGetService {
         if (selectedParts == null || selectedParts.isEmpty()) {
             throw new SecretNotFoundException();
         }
-        return new ReconstructionParts(requireThreshold(selectedParts), resolvedVersion, selectedParts.size());
+        int liveRepairTargets = liveMissingPeerParts
+                + countFoundPartsMissingVersion(foundPeerParts, resolvedVersion)
+                + (hasPartForVersion(localPart, resolvedVersion) ? 0 : 1);
+        return new ReconstructionParts(
+                requireThreshold(selectedParts), resolvedVersion, selectedParts.size(), liveRepairTargets);
     }
 
     private Map<Long, Map<Integer, SecretPart>> collectAllPartsByVersion(SecretKey key) {
@@ -152,11 +162,13 @@ public class InternalGetService {
         return partsByVersion;
     }
 
-    private void addLocalPart(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key, Long requestedVersion) {
+    private Optional<SecretPart> addLocalPart(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key,
+            Long requestedVersion) {
         Optional<SecretPart> localPart = requestedVersion == null
                 ? secretPartRepository.findLatest(key)
                 : secretPartRepository.findPart(key, requestedVersion);
         localPart.ifPresent(part -> addPart(partsByVersion, part));
+        return localPart;
     }
 
     private void addLocalVersionParts(Map<Long, Map<Integer, SecretPart>> partsByVersion, SecretKey key) {
@@ -197,7 +209,8 @@ public class InternalGetService {
         if (requestedVersion != null || internalRepairService == null) {
             return;
         }
-        if (!internalRepairService.shouldRepairLatestRead(reconstructionParts.availableParts())) {
+        if (!internalRepairService.shouldRepairLatestRead(
+                reconstructionParts.availableParts(), reconstructionParts.liveRepairTargets())) {
             return;
         }
         try {
@@ -226,6 +239,27 @@ public class InternalGetService {
         return threshold;
     }
 
-    private record ReconstructionParts(List<SecretPart> selectedParts, long version, int availableParts) {
+    private boolean isMissingPartResponse(SecretPartResponse response) {
+        return response != null && response.statusCode() != null && response.statusCode() == 404;
+    }
+
+    private int countFoundPartsMissingVersion(List<SecretPart> foundParts, long resolvedVersion) {
+        int missing = 0;
+        for (SecretPart part : foundParts) {
+            if (!hasPartForVersion(Optional.ofNullable(part), resolvedVersion)) {
+                missing++;
+            }
+        }
+        return missing;
+    }
+
+    private boolean hasPartForVersion(Optional<SecretPart> part, long version) {
+        return part.isPresent()
+                && part.get().getVersion() != null
+                && part.get().getVersion() == version;
+    }
+
+    private record ReconstructionParts(List<SecretPart> selectedParts, long version, int availableParts,
+            int liveRepairTargets) {
     }
 }

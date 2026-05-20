@@ -48,8 +48,11 @@ public class InternalRepairService {
                 ? envNodeId : "local-node";
     }
 
-    public boolean shouldRepairLatestRead(int availableParts) {
+    public boolean shouldRepairLatestRead(int availableParts, int liveRepairTargets) {
         if (clusterConfig == null || !clusterConfig.isRepairEnabled()) {
+            return false;
+        }
+        if (liveRepairTargets <= 0) {
             return false;
         }
         int totalParts = resolveTotalParts();

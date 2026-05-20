@@ -61,15 +61,21 @@ public class InternalRepairServiceTest {
 
     @Test
     void testShouldRepairAtThresholdOrThresholdPlusBuffer() {
-        assertTrue(service.shouldRepairLatestRead(2));
-        assertTrue(service.shouldRepairLatestRead(3));
+        assertTrue(service.shouldRepairLatestRead(2, 1));
+        assertTrue(service.shouldRepairLatestRead(3, 1));
+    }
+
+    @Test
+    void testShouldNotRepairWithoutLiveRepairTarget() {
+        assertFalse(service.shouldRepairLatestRead(2, 0));
+        assertFalse(service.shouldRepairLatestRead(3, 0));
     }
 
     @Test
     void testShouldNotRepairWhenDisabledOrBelowThreshold() {
-        assertFalse(service.shouldRepairLatestRead(1));
+        assertFalse(service.shouldRepairLatestRead(1, 1));
         clusterConfig.setRepairEnabled(false);
-        assertFalse(service.shouldRepairLatestRead(2));
+        assertFalse(service.shouldRepairLatestRead(2, 1));
     }
 
     @Test

@@ -82,16 +82,37 @@ public class InternalGetServiceTest {
         SecretPart part = new SecretPart(validKey, 2L, 1, new byte[] { 1, 2 });
         SecretPart peerPart = new SecretPart(validKey, 2L, 2, new byte[] { 3, 4 });
         when(secretPartRepository.findLatest(validKey)).thenReturn(Optional.of(part));
-        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080"));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
         when(nodeClient.fetchSecretPart("http://peer1:8080", validKey, null))
                 .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart));
+        when(nodeClient.fetchSecretPart("http://peer2:8080", validKey, null))
+                .thenReturn(SecretPartResponse.rejected("http://peer2:8080", 404, "missing"));
         when(secretReconstructionService.reconstruct(anyList())).thenReturn("reconstructed");
-        when(internalRepairService.shouldRepairLatestRead(2)).thenReturn(true);
+        when(internalRepairService.shouldRepairLatestRead(2, 1)).thenReturn(true);
 
         String result = internalGetService.getAcrossCluster(validKey, null);
 
         assertEquals("reconstructed", result);
         verify(internalRepairService).repairLatestVersion(validKey, 2L, "reconstructed");
+    }
+
+    @Test
+    void testGetAcrossClusterDoesNotTreatDeadPeerAsRepairTarget() {
+        SecretPart part = new SecretPart(validKey, 2L, 1, new byte[] { 1, 2 });
+        SecretPart peerPart = new SecretPart(validKey, 2L, 2, new byte[] { 3, 4 });
+        when(secretPartRepository.findLatest(validKey)).thenReturn(Optional.of(part));
+        when(nodeClient.resolvePeerUrls()).thenReturn(List.of("http://peer1:8080", "http://peer2:8080"));
+        when(nodeClient.fetchSecretPart("http://peer1:8080", validKey, null))
+                .thenReturn(SecretPartResponse.found("http://peer1:8080", peerPart));
+        when(nodeClient.fetchSecretPart("http://peer2:8080", validKey, null))
+                .thenReturn(SecretPartResponse.failed("http://peer2:8080", "timeout"));
+        when(secretReconstructionService.reconstruct(anyList())).thenReturn("reconstructed");
+
+        String result = internalGetService.getAcrossCluster(validKey, null);
+
+        assertEquals("reconstructed", result);
+        verify(internalRepairService).shouldRepairLatestRead(2, 0);
+        verify(internalRepairService, never()).repairLatestVersion(validKey, 2L, "reconstructed");
     }
 
     @Test
