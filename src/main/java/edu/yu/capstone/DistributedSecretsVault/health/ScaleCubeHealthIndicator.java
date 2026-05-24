@@ -8,6 +8,13 @@ import org.springframework.stereotype.Component;
 
 import io.scalecube.services.Microservices;
 
+/**
+ * Spring Boot Actuator health indicator for ScaleCube cluster membership.
+ * <p>
+ * Reports {@code UP} with the number of discovered service endpoints when
+ * ScaleCube is initialized, or {@code DOWN} otherwise. Only active when
+ * a {@link Microservices} bean exists in the context.
+ */
 @Component
 @ConditionalOnBean(Microservices.class)
 public class ScaleCubeHealthIndicator implements HealthIndicator {
@@ -15,6 +22,12 @@ public class ScaleCubeHealthIndicator implements HealthIndicator {
     @Autowired
     private Microservices microservices;
 
+    /**
+     * Checks ScaleCube connectivity and returns health details.
+     *
+     * @return {@link Health#up()} with endpoint count, or {@link Health#down()} if
+     *         ScaleCube is not initialized
+     */
     @Override
     public Health health() {
         if (microservices == null || microservices.serviceEndpoints() == null) {

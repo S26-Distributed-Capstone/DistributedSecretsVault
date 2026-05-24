@@ -19,6 +19,17 @@ import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
 // TODO attempt to switch from using a raw list for listVersionsScript
 
+/**
+ * Redis-backed implementation of {@link SecretPartRepository}.
+ * <p>
+ * All persistence operations are executed as atomic Lua scripts to guarantee
+ * consistency within a single Redis instance. Secret shards are serialized as
+ * JSON via {@link Gson} and stored in a Redis sorted set keyed by
+ * {@code ownerId:name}, with the version number as the score.
+ * <p>
+ * Each Lua script is loaded from the classpath ({@code redis/*.lua}) at
+ * construction time and cached as a {@link RedisScript}.
+ */
 @Repository
 public class RedisSecretPartRepository implements SecretPartRepository {
     private static final String SAVE_PART_PATH = "redis/save_part.lua";
@@ -39,6 +50,11 @@ public class RedisSecretPartRepository implements SecretPartRepository {
     private final RedisScript<Long> updatePartScript;
     private final RedisScript<Long> deleteScript;
 
+    /**
+     * Constructs the repository and pre-loads all Lua scripts from the classpath.
+     *
+     * @param redisTemplate Spring Redis template for executing scripts
+     */
     public RedisSecretPartRepository(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
         this.gson = new Gson();
@@ -51,6 +67,7 @@ public class RedisSecretPartRepository implements SecretPartRepository {
         this.deleteScript = loadScript(DELETE_PATH, Long.class);
     }
 
+    /** {@inheritDoc} */
     @Override
     public Optional<SecretPart> findPart(SecretKey key, long version) {
         String value = redisTemplate.execute(getByVersionScript, List.of(secretKey(key)), String.valueOf(version));
@@ -60,6 +77,7 @@ public class RedisSecretPartRepository implements SecretPartRepository {
         return Optional.of(deserialize(value));
     }
 
+    /** {@inheritDoc} */
     @Override
     public Optional<SecretPart> findLatest(SecretKey key) {
         String value = redisTemplate.execute(getLatestScript, List.of(secretKey(key)));
@@ -69,12 +87,14 @@ public class RedisSecretPartRepository implements SecretPartRepository {
         return Optional.of(deserialize(value));
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<Long> listVersions(SecretKey key) {
         List<?> rawVersions = redisTemplate.execute(listVersionsScript, List.of(secretKey(key)));
         if (rawVersions == null || rawVersions.isEmpty()) {
             return List.of();
         }
+        // Lua returns version numbers as strings; convert each to Long
         List<Long> results = new ArrayList<>(rawVersions.size());
         for (Object version : rawVersions) {
             try {
@@ -86,12 +106,14 @@ public class RedisSecretPartRepository implements SecretPartRepository {
         return results;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean exists(SecretKey key) {
         Long size = redisTemplate.execute(existsScript, List.of(secretKey(key)));
         return size != null && size > 0;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void savePart(SecretPart part) {
         if (part == null || part.getKey() == null) {
@@ -101,6 +123,7 @@ public class RedisSecretPartRepository implements SecretPartRepository {
                 String.valueOf(part.getVersion()), serialize(part));
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean updatePart(SecretPart part) {
         if (part == null || part.getKey() == null) {
@@ -111,11 +134,20 @@ public class RedisSecretPartRepository implements SecretPartRepository {
         return updated != null && updated > 0;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void deleteParts(SecretKey key) {
         redisTemplate.execute(deleteScript, List.of(secretKey(key)));
     }
 
+    /**
+     * Loads a Lua script from the classpath and caches it for repeated execution.
+     *
+     * @param path       classpath-relative path to the {@code .lua} file
+     * @param resultType expected return type of the script
+     * @param <T>        result type parameter
+     * @return a cached {@link RedisScript}
+     */
     private <T> RedisScript<T> loadScript(String path, Class<T> resultType) {
         DefaultRedisScript<T> script = new DefaultRedisScript<>();
         script.setLocation(new ClassPathResource(path));
@@ -123,6 +155,9 @@ public class RedisSecretPartRepository implements SecretPartRepository {
         return script;
     }
 
+    /**
+     * Converts a {@link SecretKey} into the Redis key string {@code ownerId:name}.
+     */
     private String secretKey(SecretKey key) {
         if (key == null || key.getOwnerId() == null || key.getName() == null) {
             throw new IllegalArgumentException("Secret key is required");
@@ -130,10 +165,12 @@ public class RedisSecretPartRepository implements SecretPartRepository {
         return key.getOwnerId() + ":" + key.getName();
     }
 
+    /** Serializes a {@link SecretPart} to JSON. */
     private String serialize(SecretPart part) {
         return gson.toJson(part);
     }
 
+    /** Deserializes JSON back to a {@link SecretPart}. */
     private SecretPart deserialize(String value) {
         try {
             return gson.fromJson(value, SecretPart.class);

@@ -11,16 +11,34 @@ import edu.yu.capstone.DistributedSecretsVault.domain.model.SecretVersion;
 import edu.yu.capstone.DistributedSecretsVault.dto.secret.PostSecretRequest;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.InternalPostService;
 
+/**
+ * Public-facing command service for creating a new secret.
+ * <p>
+ * This layer performs request validation and response formatting while
+ * {@link InternalPostService} owns the cluster coordination and shard storage.
+ */
 @Service
 public class PostSecretService implements SecretCommand<PostSecretRequest, String> {
     private static final Logger log = LoggerFactory.getLogger(PostSecretService.class);
 
     private final InternalPostService internalPostService;
 
+    /**
+     * Creates a post command backed by the distributed internal create service.
+     *
+     * @param internalPostService service that creates secret shards across the cluster
+     */
     public PostSecretService(InternalPostService internalPostService) {
         this.internalPostService = internalPostService;
     }
 
+    /**
+     * Creates version 1 of a secret for the given user.
+     *
+     * @param input create request containing user, name, and plaintext value
+     * @return HTTP 201 response with the created version number
+     * @throws IllegalArgumentException if the request or user is missing
+     */
     @Override
     public ResponseEntity<String> execute(PostSecretRequest input) {
         if (input == null) {

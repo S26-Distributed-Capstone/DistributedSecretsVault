@@ -22,6 +22,21 @@ import edu.yu.capstone.DistributedSecretsVault.service.communication.CommitPubli
 import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.PeerResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretSharingService;
 
+/**
+ * Orchestrates the distributed two-phase commit for updating an existing secret.
+ * <p>
+ * Flow:
+ * <ol>
+ *   <li>Read the current version from local Redis</li>
+ *   <li>Split the new plaintext into Shamir shards with version = current + 1</li>
+ *   <li>Buffer the local shard and broadcast prepare requests to peers</li>
+ *   <li>If quorum is reached, publish a commit message via Kafka</li>
+ *   <li>If quorum fails, discard the buffered action</li>
+ * </ol>
+ *
+ * @see PutPrepareHandler
+ * @see PutCommitHandler
+ */
 @Service
 public class InternalPutService {
     private static final Logger log = LoggerFactory.getLogger(InternalPutService.class);
@@ -55,6 +70,16 @@ public class InternalPutService {
                 ? envNodeId : "local-node";
     }
 
+    /**
+     * Updates a secret across the cluster using the two-phase commit protocol.
+     *
+     * @param key   composite key identifying the secret
+     * @param value new plaintext value
+     * @return the {@link SecretVersion} with the new version number
+     * @throws SecretNotFoundException     if the secret does not exist locally
+     * @throws QuorumNotReachedException   if not enough peers acknowledged the prepare
+     * @throws IllegalArgumentException    if key or value is null/blank
+     */
     public SecretVersion putAcrossCluster(SecretKey key, String value) {
         validateInput(key, value);
 

@@ -14,6 +14,13 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class RestClientConfig {
 
+    /**
+     * Creates a {@link RestClient} with connect and read timeouts derived from
+     * {@link ClusterConfig#getWriteTimeoutMillis()}, falling back to 5000ms.
+     *
+     * @param clusterConfig cluster configuration providing timeout values
+     * @return a configured {@link RestClient} instance
+     */
     @Bean
     public RestClient restClient(ClusterConfig clusterConfig) {
         long timeoutMs = clusterConfig.getWriteTimeoutMillis();

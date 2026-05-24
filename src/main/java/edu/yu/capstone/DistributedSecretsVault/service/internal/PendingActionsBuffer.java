@@ -49,6 +49,11 @@ public class PendingActionsBuffer {
     private final Map<SecretKey, KeyLock> locksBySecretKey = new ConcurrentHashMap<>();
     private final long evictionTimeoutMillis;
 
+    /**
+     * Constructs the buffer with the eviction timeout from cluster configuration.
+     *
+     * @param clusterConfig cluster config providing {@link ClusterConfig#getLockTimeoutMillis()}
+     */
     public PendingActionsBuffer(ClusterConfig clusterConfig) {
         long timeout = clusterConfig.getLockTimeoutMillis();
         this.evictionTimeoutMillis = timeout > 0 ? timeout : 30_000L;
@@ -65,6 +70,14 @@ public class PendingActionsBuffer {
         bufferAction(operationId, secretKey, actionType, null);
     }
 
+    /**
+     * Buffer an action received during the prepare phase, including a shard payload.
+     *
+     * @param operationId unique ID correlating prepare to commit
+     * @param secretKey   the key being affected by this action
+     * @param actionType  the type of action being buffered
+     * @param secretPart  the shard payload to buffer (null for delete operations)
+     */
     public void bufferAction(UUID operationId, SecretKey secretKey, ActionType actionType, SecretPart secretPart) {
         PendingAction entry = new PendingAction(operationId, secretKey, actionType, secretPart, Instant.now());
         KeyLock keyLock = acquireLock(secretKey);
@@ -129,6 +142,15 @@ public class PendingActionsBuffer {
         }
     }
 
+    /**
+     * Discard a buffered action without committing it.
+     * <p>
+     * Used when the originator determines that quorum was not reached
+     * and the operation should be abandoned.
+     *
+     * @param operationId the operation ID to discard
+     * @return the discarded pending action, or {@code null} if not found
+     */
     public PendingAction discard(UUID operationId) {
         PendingAction candidate = byOperationId.get(operationId);
         if (candidate == null) {
@@ -214,6 +236,7 @@ public class PendingActionsBuffer {
         }
     }
 
+    /** Removes an operation ID from the secondary (SecretKey → operationIds) index. */
     private void removeFromSecretKeyIndex(SecretKey key, UUID operationId) {
         Set<UUID> ops = bySecretKey.get(key);
         if (ops != null) {
@@ -224,6 +247,10 @@ public class PendingActionsBuffer {
         }
     }
 
+    /**
+     * Acquires the per-key reentrant lock, creating it if necessary.
+     * Uses reference counting so locks can be cleaned up when no longer needed.
+     */
     private KeyLock acquireLock(SecretKey key) {
         KeyLock keyLock = locksBySecretKey.compute(key, (ignored, existing) -> {
             if (existing == null) {
@@ -236,6 +263,10 @@ public class PendingActionsBuffer {
         return keyLock;
     }
 
+    /**
+     * Releases the per-key lock and removes it from the map if no other
+     * threads hold a reference.
+     */
     private void releaseLock(SecretKey key, KeyLock keyLock) {
         try {
             keyLock.unlock();
@@ -249,6 +280,14 @@ public class PendingActionsBuffer {
         }
     }
 
+    /**
+     * Reference-counted reentrant lock for per-key synchronization.
+     * <p>
+     * Each {@link SecretKey} gets its own lock so that operations on different
+     * secrets do not contend with each other. The reference count tracks how
+     * many threads currently hold or are waiting for this lock; when it drops
+     * to zero, the lock is removed from the map.
+     */
     private static final class KeyLock {
         private final ReentrantLock lock = new ReentrantLock();
         private final AtomicInteger references = new AtomicInteger(1);

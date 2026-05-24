@@ -8,6 +8,19 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
+/**
+ * Handles incoming <b>prepare</b> requests for distributed update (PUT) operations.
+ * <p>
+ * When the originator broadcasts a put-prepare, each peer:
+ * <ol>
+ *   <li>Validates the request</li>
+ *   <li>Checks that the secret <em>does</em> exist locally</li>
+ *   <li>Buffers the updated shard in {@link PendingActionsBuffer}</li>
+ * </ol>
+ * The originator interprets a successful return (no exception) as an ACK.
+ *
+ * @see PutCommitHandler
+ */
 @Service
 public class PutPrepareHandler {
     private final PendingActionsBuffer pendingActionsBuffer;
@@ -19,6 +32,13 @@ public class PutPrepareHandler {
         this.secretPartRepository = secretPartRepository;
     }
 
+    /**
+     * Processes a put-prepare request: verifies existence and buffers the updated shard.
+     *
+     * @param request the prepare request from the originator
+     * @throws IllegalArgumentException if the request is invalid
+     * @throws SecretNotFoundException  if the secret does not exist locally
+     */
     public void handle(PutPrepareRequest request) {
         validateRequest(request);
 
@@ -36,6 +56,7 @@ public class PutPrepareHandler {
                 request.getOperationId(), message.getKey(), ActionType.PUT, part);
     }
 
+    /** Validates that all required fields of a put-prepare request are present. */
     private void validateRequest(PutPrepareRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Put prepare request is required");

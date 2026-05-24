@@ -18,6 +18,21 @@ import edu.yu.capstone.DistributedSecretsVault.service.communication.CommitPubli
 import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.PeerResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretSharingService;
 
+/**
+ * Orchestrates the read-repair protocol to restore full shard redundancy.
+ * <p>
+ * Read-repair is triggered automatically during a read when the number of
+ * available shards is near (or at) the reconstruction threshold. The service
+ * re-splits the plaintext into fresh Shamir shards and distributes them to
+ * nodes that are missing the latest version, using the same two-phase
+ * commit protocol as POST/PUT.
+ * <p>
+ * The repair is "best-effort": if quorum cannot be reached or the Kafka
+ * commit fails, the repair is silently skipped without affecting the read.
+ *
+ * @see RepairPrepareHandler
+ * @see RepairCommitHandler
+ */
 @Service
 public class InternalRepairService {
     private static final Logger log = LoggerFactory.getLogger(InternalRepairService.class);
@@ -48,6 +63,20 @@ public class InternalRepairService {
                 ? envNodeId : "local-node";
     }
 
+    /**
+     * Determines whether a read-repair should be triggered after a successful read.
+     * <p>
+     * Returns {@code true} when:
+     * <ul>
+     *   <li>Repair is enabled in configuration</li>
+     *   <li>There are live nodes missing the shard</li>
+     *   <li>Available shards are within the configured buffer above the threshold</li>
+     * </ul>
+     *
+     * @param availableParts     number of shards successfully collected
+     * @param liveRepairTargets  number of live nodes that were missing the shard
+     * @return {@code true} if repair should be attempted
+     */
     public boolean shouldRepairLatestRead(int availableParts, int liveRepairTargets) {
         if (clusterConfig == null || !clusterConfig.isRepairEnabled()) {
             return false;
@@ -64,6 +93,18 @@ public class InternalRepairService {
         return availableParts <= threshold + buffer;
     }
 
+    /**
+     * Executes a read-repair for the specified secret version.
+     * <p>
+     * Re-splits the value into Shamir shards and distributes them to all nodes
+     * using the two-phase commit protocol. If quorum is not reached or the
+     * Kafka commit fails, the repair is silently abandoned.
+     *
+     * @param key     the composite secret key
+     * @param version the version number to repair
+     * @param value   the reconstructed plaintext value to re-shard
+     * @throws IllegalArgumentException if key or value is null
+     */
     public void repairLatestVersion(SecretKey key, long version, String value) {
         if (key == null || value == null) {
             throw new IllegalArgumentException("Secret key and value are required for repair");
