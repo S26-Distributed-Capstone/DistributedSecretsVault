@@ -16,6 +16,19 @@ import edu.yu.capstone.DistributedSecretsVault.service.internal.PostCommitHandle
 import edu.yu.capstone.DistributedSecretsVault.service.internal.PutCommitHandler;
 import edu.yu.capstone.DistributedSecretsVault.service.internal.RepairCommitHandler;
 
+/**
+ * Routes incoming {@link CommitMessage}s from Kafka to the appropriate
+ * commit handler based on the {@link ActionType}.
+ * <p>
+ * Each commit handler finalizes the buffered prepare action for one
+ * operation type (POST, PUT, DELETE, REPAIR). If no matching buffered
+ * action exists (e.g. it was already evicted or committed by a different
+ * message), the resulting {@link InternalOperationConflictException} is
+ * caught and logged rather than propagated.
+ *
+ * @see CommitListener
+ * @see CommitPublisher
+ */
 @Service
 public class CommitDispatcher {
     private static final Logger log = LoggerFactory.getLogger(CommitDispatcher.class);
@@ -25,6 +38,9 @@ public class CommitDispatcher {
     private final PutCommitHandler putCommitHandler;
     private final RepairCommitHandler repairCommitHandler;
 
+    /**
+     * Constructs the dispatcher with all commit handler implementations.
+     */
     public CommitDispatcher(DeleteCommitHandler deleteCommitHandler,
             PostCommitHandler postCommitHandler,
             PutCommitHandler putCommitHandler,
@@ -35,6 +51,15 @@ public class CommitDispatcher {
         this.repairCommitHandler = repairCommitHandler;
     }
 
+    /**
+     * Dispatches a commit message to the correct handler based on action type.
+     * <p>
+     * Stale or conflicting commits (where the buffered prepare was already
+     * evicted or superseded) are silently ignored.
+     *
+     * @param message the Kafka commit message
+     * @throws IllegalArgumentException if the message or any required field is null
+     */
     public void dispatch(CommitMessage message) {
         validate(message);
         try {
@@ -56,6 +81,9 @@ public class CommitDispatcher {
         }
     }
 
+    /**
+     * Validates that all required fields of a commit message are present.
+     */
     private void validate(CommitMessage message) {
         if (message == null) {
             throw new IllegalArgumentException("Commit message is required");

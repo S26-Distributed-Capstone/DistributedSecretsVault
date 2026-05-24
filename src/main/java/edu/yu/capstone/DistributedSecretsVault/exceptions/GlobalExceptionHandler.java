@@ -6,6 +6,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
+/**
+ * Centralized exception-to-HTTP-status mapping for the entire application.
+ * <p>
+ * Each handler method catches a specific domain exception, selects the
+ * appropriate HTTP status code, and returns a uniform {@link ErrorResponse}
+ * body. This ensures clients always receive a consistent error format
+ * regardless of which controller triggered the exception.
+ * <p>
+ * Status code assignments follow the design documents in {@code docs/crud/}.
+ */
 @ControllerAdvice
 public class GlobalExceptionHandler {
 

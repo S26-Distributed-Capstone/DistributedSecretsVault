@@ -22,6 +22,20 @@ import edu.yu.capstone.DistributedSecretsVault.service.communication.CommitPubli
 import edu.yu.capstone.DistributedSecretsVault.service.internal.NodeClient.PeerResponse;
 import edu.yu.capstone.DistributedSecretsVault.service.secret.SecretSharingService;
 
+/**
+ * Orchestrates the distributed two-phase commit for creating a new secret.
+ * <p>
+ * Flow:
+ * <ol>
+ *   <li>Split the plaintext into Shamir shards</li>
+ *   <li>Buffer the local shard and broadcast prepare requests to peers</li>
+ *   <li>If quorum is reached, publish a commit message via Kafka</li>
+ *   <li>If quorum fails, discard the buffered action</li>
+ * </ol>
+ *
+ * @see PostPrepareHandler
+ * @see PostCommitHandler
+ */
 @Service
 public class InternalPostService {
     private static final Logger log = LoggerFactory.getLogger(InternalPostService.class);
@@ -55,6 +69,16 @@ public class InternalPostService {
                 ? envNodeId : "local-node";
     }
 
+    /**
+     * Creates a secret across the cluster using the two-phase commit protocol.
+     *
+     * @param key   composite key identifying the secret
+     * @param value plaintext secret value to store
+     * @return the {@link SecretVersion} created (always version 1)
+     * @throws DuplicateSecretException    if the secret already exists locally
+     * @throws QuorumNotReachedException   if not enough peers acknowledged the prepare
+     * @throws IllegalArgumentException    if key or value is null/blank
+     */
     public SecretVersion postAcrossCluster(SecretKey key, String value) {
         validateInput(key, value);
         if (secretPartRepository.exists(key)) {

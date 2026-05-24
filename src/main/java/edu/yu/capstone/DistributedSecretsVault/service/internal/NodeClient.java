@@ -44,6 +44,15 @@ public class NodeClient {
     private final String selfHost;
     private final int httpPort;
 
+    /**
+     * Constructs the node client with a REST client and optional ScaleCube instance.
+     * <p>
+     * Reads {@code POD_IP} for self-identification and {@code SERVER_PORT}
+     * for the HTTP port, falling back to {@code localhost} and {@code 8080}.
+     *
+     * @param restClient    configured REST client for outbound HTTP calls
+     * @param microservices optional ScaleCube instance for peer discovery
+     */
     public NodeClient(RestClient restClient, Optional<Microservices> microservices) {
         this.restClient = restClient;
         this.microservices = microservices;
@@ -89,6 +98,13 @@ public class NodeClient {
         }
     }
 
+    /**
+     * Sends a post-prepare request to a peer node.
+     *
+     * @param peerUrl base URL of the peer
+     * @param request the prepare request containing the shard
+     * @return peer response indicating ACK or failure
+     */
     public PeerResponse sendPostPrepare(String peerUrl, PostPrepareRequest request) {
         try {
             restClient.post()
@@ -107,6 +123,13 @@ public class NodeClient {
         }
     }
 
+    /**
+     * Sends a put-prepare request to a peer node.
+     *
+     * @param peerUrl base URL of the peer
+     * @param request the prepare request containing the updated shard
+     * @return peer response indicating ACK or failure
+     */
     public PeerResponse sendPutPrepare(String peerUrl, PutPrepareRequest request) {
         try {
             restClient.put()
@@ -125,6 +148,13 @@ public class NodeClient {
         }
     }
 
+    /**
+     * Sends a repair-prepare request to a peer node.
+     *
+     * @param peerUrl base URL of the peer
+     * @param request the repair prepare request containing the shard
+     * @return peer response indicating ACK or failure
+     */
     public PeerResponse sendRepairPrepare(String peerUrl, RepairPrepareRequest request) {
         try {
             restClient.post()
@@ -143,6 +173,14 @@ public class NodeClient {
         }
     }
 
+    /**
+     * Fetches a single secret shard from a peer node, optionally at a specific version.
+     *
+     * @param peerUrl base URL of the peer
+     * @param key     the secret key to fetch
+     * @param version optional version; if null, fetches the latest
+     * @return response containing the shard if found, or error details
+     */
     public SecretPartResponse fetchSecretPart(String peerUrl, SecretKey key, Long version) {
         try {
             SecretPart part;
@@ -173,6 +211,13 @@ public class NodeClient {
         }
     }
 
+    /**
+     * Fetches all version shards for a secret from a peer node.
+     *
+     * @param peerUrl base URL of the peer
+     * @param key     the secret key to fetch
+     * @return response containing a map of version→shard if found, or error details
+     */
     public SecretPartsResponse fetchAllSecretParts(String peerUrl, SecretKey key) {
         try {
             Map<Long, SecretPart> parts = restClient.get()
@@ -247,6 +292,7 @@ public class NodeClient {
         return address;
     }
 
+    /** Reads a value from environment variables, falling back to system properties. */
     private static String readEnv(String key) {
         String value = System.getenv(key);
         if (value == null || value.isBlank()) {
@@ -255,6 +301,14 @@ public class NodeClient {
         return value;
     }
 
+    /**
+     * Result of a prepare request to a peer node.
+     *
+     * @param peerUrl      the peer's base URL
+     * @param acknowledged {@code true} if the peer accepted the prepare
+     * @param statusCode   HTTP status code (null if network failure)
+     * @param errorMessage error detail (null on success)
+     */
     public record PeerResponse(String peerUrl, boolean acknowledged, Integer statusCode, String errorMessage) {
         public static PeerResponse acknowledged(String peerUrl) {
             return new PeerResponse(peerUrl, true, null, null);
@@ -269,6 +323,14 @@ public class NodeClient {
         }
     }
 
+    /**
+     * Result of a single-shard fetch from a peer node.
+     *
+     * @param peerUrl      the peer's base URL
+     * @param part         the fetched shard (null if not found or on error)
+     * @param statusCode   HTTP status code (null if network failure)
+     * @param errorMessage error detail (null on success)
+     */
     public record SecretPartResponse(String peerUrl, SecretPart part, Integer statusCode, String errorMessage) {
         public boolean found() {
             return part != null;
@@ -287,6 +349,14 @@ public class NodeClient {
         }
     }
 
+    /**
+     * Result of an all-versions fetch from a peer node.
+     *
+     * @param peerUrl      the peer's base URL
+     * @param parts        map of version→shard (null or empty if not found)
+     * @param statusCode   HTTP status code (null if network failure)
+     * @param errorMessage error detail (null on success)
+     */
     public record SecretPartsResponse(String peerUrl, Map<Long, SecretPart> parts, Integer statusCode,
             String errorMessage) {
         public boolean found() {

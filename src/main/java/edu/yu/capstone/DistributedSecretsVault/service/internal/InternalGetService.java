@@ -22,6 +22,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
 
+/**
+ * Orchestrates secret retrieval across the cluster.
+ * <p>
+ * For cluster-wide reads, this service collects shards from the local
+ * repository and all reachable peer nodes, then uses
+ * {@link SecretReconstructionService} to reconstruct the plaintext secret
+ * via Shamir's scheme. If the number of available shards is near the
+ * threshold, an automatic read-repair is triggered.
+ * <p>
+ * For internal (node-local) reads, it serves individual shards directly
+ * from the local Redis.
+ */
 @Service
 public class InternalGetService {
     private static final Logger log = LoggerFactory.getLogger(InternalGetService.class);
@@ -44,6 +56,16 @@ public class InternalGetService {
         this.internalRepairService = internalRepairService;
     }
 
+    /**
+     * Retrieves a secret across the cluster by collecting shards from all nodes.
+     * Optionally triggers read-repair if shard count is near the threshold.
+     *
+     * @param key     the composite secret key
+     * @param version optional version; if null, fetches the latest
+     * @return the reconstructed plaintext secret value
+     * @throws SecretNotFoundException    if no shards are found
+     * @throws InsufficientShardsException if not enough shards for reconstruction
+     */
     public String getAcrossCluster(SecretKey key, Long version) {
         validateKey(key);
         ReconstructionParts reconstructionParts = collectPartsForReconstruction(key, version);
@@ -52,6 +74,13 @@ public class InternalGetService {
         return value;
     }
 
+    /**
+     * Retrieves all versions of a secret across the cluster, reconstructing each.
+     *
+     * @param key the composite secret key
+     * @return map of version numbers to reconstructed plaintext values
+     * @throws SecretNotFoundException if no versions are found
+     */
     public Map<Long, String> getAllVersionsAcrossCluster(SecretKey key) {
         validateKey(key);
         Map<Long, Map<Integer, SecretPart>> partsByVersion = collectAllPartsByVersion(key);
@@ -66,6 +95,15 @@ public class InternalGetService {
         return results;
     }
 
+    /**
+     * Retrieves a single shard from the local node's Redis (called by peers).
+     *
+     * @param user       the secret owner
+     * @param secretName the secret name
+     * @param version    optional version; if null, returns the latest
+     * @return the local {@link SecretPart}
+     * @throws SecretNotFoundException if the secret or version is not found locally
+     */
     public ResponseEntity<SecretPart> getVersion(String user, String secretName, Long version) {
         SecretKey key = validate(user, secretName);
         if (!secretPartRepository.exists(key)) {
@@ -80,6 +118,14 @@ public class InternalGetService {
         return ResponseEntity.ok(part.get());
     }
 
+    /**
+     * Retrieves all version shards from the local node's Redis (called by peers).
+     *
+     * @param user       the secret owner
+     * @param secretName the secret name
+     * @return map of version numbers to local {@link SecretPart}s
+     * @throws SecretNotFoundException if no versions are found locally
+     */
     public ResponseEntity<Map<Long, SecretPart>> getAllVersions(String user, String secretName) {
         SecretKey key = validate(user, secretName);
         List<Long> versions = secretPartRepository.listVersions(key);
@@ -259,6 +305,10 @@ public class InternalGetService {
                 && part.get().getVersion() == version;
     }
 
+    /**
+     * Intermediate result holding the shards selected for reconstruction
+     * and metadata needed for read-repair decisions.
+     */
     private record ReconstructionParts(List<SecretPart> selectedParts, long version, int availableParts,
             int liveRepairTargets) {
     }

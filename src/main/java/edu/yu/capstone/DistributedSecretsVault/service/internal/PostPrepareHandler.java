@@ -8,6 +8,19 @@ import edu.yu.capstone.DistributedSecretsVault.dto.internal.SecretPartMessage;
 import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
+/**
+ * Handles incoming <b>prepare</b> requests for distributed create (POST) operations.
+ * <p>
+ * When the originator broadcasts a post-prepare, each peer:
+ * <ol>
+ *   <li>Validates the request</li>
+ *   <li>Checks that the secret does <em>not</em> already exist locally (duplicate check)</li>
+ *   <li>Buffers the shard in {@link PendingActionsBuffer}</li>
+ * </ol>
+ * The originator interprets a successful return (no exception) as an ACK.
+ *
+ * @see PostCommitHandler
+ */
 @Service
 public class PostPrepareHandler {
     private final PendingActionsBuffer pendingActionsBuffer;
@@ -19,6 +32,13 @@ public class PostPrepareHandler {
         this.secretPartRepository = secretPartRepository;
     }
 
+    /**
+     * Processes a post-prepare request: verifies uniqueness and buffers the shard.
+     *
+     * @param request the prepare request from the originator
+     * @throws IllegalArgumentException if the request is invalid
+     * @throws DuplicateSecretException if the secret already exists locally
+     */
     public void handle(PostPrepareRequest request) {
         validateRequest(request);
 
@@ -36,6 +56,7 @@ public class PostPrepareHandler {
                 request.getOperationId(), message.getKey(), ActionType.POST, part);
     }
 
+    /** Validates that all required fields of a post-prepare request are present. */
     private void validateRequest(PostPrepareRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Post prepare request is required");

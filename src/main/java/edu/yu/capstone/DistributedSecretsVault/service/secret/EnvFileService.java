@@ -21,6 +21,15 @@ import edu.yu.capstone.DistributedSecretsVault.exceptions.DuplicateSecretExcepti
 import edu.yu.capstone.DistributedSecretsVault.exceptions.SecretNotFoundException;
 import edu.yu.capstone.DistributedSecretsVault.repository.SecretPartRepository;
 
+/**
+ * Applies a batch of secret operations encoded in a {@code .env}-style file.
+ * <p>
+ * Supported entries are {@code KEY=new:value}, {@code KEY=update:value},
+ * {@code KEY=get}, {@code KEY=get:version}, and {@code KEY=delete}. Blank
+ * lines and comment lines are ignored. Create, update, and get operations are
+ * returned as regular {@code KEY=value} lines so callers can materialize a
+ * resolved environment file.
+ */
 @Service
 public class EnvFileService {
     private static final Logger log = LoggerFactory.getLogger(EnvFileService.class);
@@ -31,6 +40,16 @@ public class EnvFileService {
     private final GetSecretService getSecretService;
     private final SecretPartRepository secretPartRepository;
 
+    /**
+     * Creates a batch processor that delegates each parsed operation to the
+     * existing single-secret services.
+     *
+     * @param postSecretService     service used for {@code new} operations
+     * @param putSecretService      service used for {@code update} operations
+     * @param deleteSecretService   service used for {@code delete} operations
+     * @param getSecretService      service used for {@code get} operations
+     * @param secretPartRepository  repository used for existence checks
+     */
     public EnvFileService(PostSecretService postSecretService,
             PutSecretService putSecretService,
             DeleteSecretService deleteSecretService,
@@ -43,6 +62,20 @@ public class EnvFileService {
         this.secretPartRepository = secretPartRepository;
     }
 
+    /**
+     * Parses, validates, and executes all operations in the submitted file.
+     * <p>
+     * Preconditions are checked for every operation before any write/delete is
+     * performed, which keeps malformed batches from being partially applied.
+     *
+     * @param user           owner whose secrets should be modified or read
+     * @param envFileContent raw {@code .env}-style content
+     * @return HTTP 200 response containing output {@code KEY=value} lines
+     * @throws IllegalArgumentException if the user or file content is invalid
+     * @throws DuplicateSecretException if a {@code new} operation targets an existing secret
+     * @throws SecretNotFoundException  if an {@code update}, {@code get}, or {@code delete}
+     *                                  operation targets a missing secret
+     */
     public ResponseEntity<String> execute(String user, String envFileContent) {
         validateUser(user);
         List<EnvSecretOperation> operations = parseOperations(envFileContent);
@@ -81,12 +114,16 @@ public class EnvFileService {
         return ResponseEntity.ok(String.join("\n", resultLines));
     }
 
+    /** Ensures every batch is scoped to a concrete secret owner. */
     private void validateUser(String user) {
         if (user == null || user.isBlank()) {
             throw new IllegalArgumentException("User is required");
         }
     }
 
+    /**
+     * Converts file lines into typed operations while rejecting duplicate keys.
+     */
     private List<EnvSecretOperation> parseOperations(String envFileContent) {
         if (envFileContent == null || envFileContent.isBlank()) {
             throw new IllegalArgumentException(".env file content is required");
@@ -102,6 +139,7 @@ public class EnvFileService {
                 continue;
             }
 
+            // Enforce one operation per key so a batch has deterministic behavior.
             EnvSecretOperation operation = parseOperationLine(trimmedLine, index + 1);
             if (!seenKeys.add(operation.key())) {
                 throw new IllegalArgumentException("Duplicate key in .env file: " + operation.key());
@@ -115,6 +153,10 @@ public class EnvFileService {
         return operations;
     }
 
+    /**
+     * Parses a single non-comment entry into its secret key, action, value, and
+     * optional version.
+     */
     private EnvSecretOperation parseOperationLine(String line, int lineNumber) {
         int equalsIndex = line.indexOf('=');
         if (equalsIndex <= 0) {
@@ -144,6 +186,7 @@ public class EnvFileService {
                     + ": expected new, update, get, or delete");
         };
 
+        // Values are required only for write actions; get/delete may be bare actions.
         if (colonIndex < 0 && action != EnvAction.GET && action != EnvAction.DELETE) {
             throw invalidLine(lineNumber);
         }
@@ -155,6 +198,7 @@ public class EnvFileService {
         return new EnvSecretOperation(key, action, value, version);
     }
 
+    /** Parses the optional version suffix used by {@code KEY=get:version}. */
     private Long parseGetVersion(String value, int lineNumber) {
         String trimmedValue = value.trim();
         if (trimmedValue.isEmpty()) {
@@ -171,11 +215,18 @@ public class EnvFileService {
         }
     }
 
+    /** Creates a consistent validation error for malformed .env entries. */
     private IllegalArgumentException invalidLine(int lineNumber) {
         return new IllegalArgumentException("Invalid .env entry on line " + lineNumber
                 + ": expected KEY=new:value, KEY=update:value, KEY=get, KEY=get:version, or KEY=delete");
     }
 
+    /**
+     * Verifies all operation preconditions before mutating cluster state.
+     *
+     * @return cached values for {@code get} operations so execution does not
+     *         perform a second distributed read
+     */
     private Map<String, String> validateOperationPreconditions(String user, List<EnvSecretOperation> operations) {
         Map<String, String> getResults = new HashMap<>();
         for (EnvSecretOperation operation : operations) {
@@ -200,10 +251,12 @@ public class EnvFileService {
         return getResults;
     }
 
+    /** Formats output lines in standard .env syntax. */
     private String formatResultLine(String key, String value) {
         return key + "=" + (value == null ? "" : value);
     }
 
+    /** Batch operation verbs supported by the .env endpoint. */
     private enum EnvAction {
         NEW,
         UPDATE,
@@ -211,6 +264,7 @@ public class EnvFileService {
         DELETE
     }
 
+    /** Parsed representation of one actionable .env line. */
     private record EnvSecretOperation(String key, EnvAction action, String value, Long version) {
     }
 }
